@@ -47,6 +47,12 @@ dev = [
 asyncio_mode = "auto"
 testpaths = ["tests"]
 
+# 显式包发现：仓库含 app/、vendor/、migrations/ 等顶层目录，
+# setuptools flat-layout 默认发现会因多顶层包拒绝构建（CI 实测失败）
+[tool.setuptools.packages.find]
+include = ["app*"]
+exclude = ["tests*", "scripts*", "migrations*", "vendor*", "docs*"]
+
 [tool.ruff]
 line-length = 120
 target-version = "py310"
