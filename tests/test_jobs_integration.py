@@ -53,9 +53,15 @@ def stub_delivery(monkeypatch):
     async def fake_edit_message(chat_id, message_id, text, reply_markup=None):
         calls["messages"].append(f"EDIT::{text}")
 
+    async def fake_send_video(chat_id, path, *, caption=None, reply_markup=None):
+        calls["videos"].append((path.name, path.stat().st_size))
+        return f"VIDEOID::{path.name}"
+
     monkeypatch.setattr(jobs.delivery, "send_document", fake_send_document)
+    monkeypatch.setattr(jobs.delivery, "send_video", fake_send_video)
     monkeypatch.setattr(jobs.delivery, "send_message", fake_send_message)
     monkeypatch.setattr(jobs.delivery, "edit_message", fake_edit_message)
+    calls["videos"] = calls.get("videos", [])
     return calls
 
 
@@ -167,3 +173,87 @@ def test_process_task_ssrf_rejected_by_worker(db, user, stub_delivery):
     assert task.status == TaskStatus.FAILED
     assert task.error_code == "INVALID_URL"
     assert stub_delivery["docs"] == []
+
+
+def _fake_run_video(default_size: int = 1024):
+    """生成 run_video 替身：在 task_dir 落真实 video.mp4，尺寸由 default_size 指定。"""
+
+    def fake_run_video(*, task_dir, url, platform, archive_time=None, on_status=None):
+        if on_status:
+            on_status(TaskStatus.FETCHING)
+        video_path = task_dir / "video.mp4"
+        with video_path.open("wb") as f:
+            f.write(b"\x00\x00\x00\x18ftypmp42")
+            f.truncate(max(default_size, 16))
+        return ArchiveResult(
+            task_dir=task_dir,
+            platform=platform.value,
+            title="视频标题",
+            author="频道",
+            source_url=url,
+            video_path=video_path,
+        )
+
+    return fake_run_video
+
+
+def _new_video_task(db, user, url="https://youtu.be/dQw4w9WgXcQ") -> Task:
+    return create_task(
+        db,
+        user_id=user.id,
+        chat_id=user.telegram_id,
+        url=url,
+        platform="youtube",  # Phase 2 视频平台
+        output_types=["MARKDOWN"],  # 视频平台忽略格式选项，只交付视频文件
+    )
+
+
+def test_process_task_video_delivery(db, user, stub_delivery, monkeypatch):
+    """视频平台：走 run_video，send_video 交付，落库 File(VIDEO)，完成消息含视频。"""
+    monkeypatch.setattr(jobs, "run_video", _fake_run_video())
+    task = _new_video_task(db, user)
+
+    outcome = jobs.process_task(task.id)
+
+    assert outcome == {"status": TaskStatus.COMPLETED}
+    db.expire_all()
+    task = db.get(Task, task.id)
+    assert task.status == TaskStatus.COMPLETED
+    assert task.title == "视频标题"
+    assert {f.type for f in task.files} == {"VIDEO"}
+    assert task.files[0].telegram_file_id.startswith("VIDEOID::")
+    assert task.files[0].size == 1024
+
+    # 本地视频已清理（历史依赖 telegram_file_id）
+    from app.storage.manager import get_storage
+
+    assert not get_storage().task_dir(task.storage_uuid).exists()
+    assert task.files[0].deleted_at is not None
+
+    assert stub_delivery["videos"][0][0] == "video.mp4"
+    texts = "\n".join(stub_delivery["messages"])
+    assert "视频标题" in texts
+    assert "已生成" in texts
+    assert "视频" in texts  # 产出清单含视频输出
+
+
+def test_process_task_video_oversized_skipped_retries(db, user, stub_delivery, monkeypatch):
+    """视频 >50MB：不尝试 send_video，作为可重试上传失败重入队（与文本类一致）。"""
+    monkeypatch.setattr(jobs, "run_video", _fake_run_video(default_size=51 * 1024 * 1024))
+    retries: list[tuple[int, int]] = []
+
+    def fake_enqueue_retry(task_id: int, attempt: int, *, job_timeout: int = 1800) -> None:
+        retries.append((task_id, attempt))
+
+    monkeypatch.setattr(jobs, "enqueue_task_retry", fake_enqueue_retry)
+    task = _new_video_task(db, user)
+
+    outcome = jobs.process_task(task.id)
+
+    assert outcome == {"status": "RETRY"}
+    assert stub_delivery["videos"] == [], "超限视频不应尝试上传"
+    db.expire_all()
+    task = db.get(Task, task.id)
+    assert task.status == TaskStatus.QUEUED
+    assert task.files == []
+    assert retries == [(task.id, 1)]

@@ -21,7 +21,13 @@ class ArchiveResult:
     pdf_path: Path | None = None
     cover_path: Path | None = None
     images: list[Path] = field(default_factory=list)
+    video_path: Path | None = None  # 视频类平台（Phase 2）：视频文件路径
 
     @property
     def image_count(self) -> int:
         return len(self.images)
+
+    @property
+    def is_video(self) -> bool:
+        """是否视频类产出（video_path 存在即视为视频交付）。"""
+        return self.video_path is not None

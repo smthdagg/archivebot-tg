@@ -62,6 +62,7 @@ class FileType(StrEnum):
     MARKDOWN = "MARKDOWN"
     IMAGES_ZIP = "IMAGES_ZIP"
     COVER = "COVER"
+    VIDEO = "VIDEO"
 
 
 # ---- 审计动作常量（设计规格 §39）----
@@ -124,6 +125,17 @@ class Platform(StrEnum):
     FEISHU = "feishu"
     WEB = "web"
     UNKNOWN = "unknown"
+
+    @classmethod
+    def video_platforms(cls) -> frozenset[str]:
+        """产出视频文件的平台（交付路径与文本类不同，规格 §2.2）。"""
+        return frozenset({
+            cls.YOUTUBE.value,
+            cls.BILIBILI.value,
+            cls.DOUYIN.value,
+            cls.KUAISHOU.value,
+            cls.INSTAGRAM.value,
+        })
 
 
 # ---- 错误码（任务失败分类，设计规格 §36）----

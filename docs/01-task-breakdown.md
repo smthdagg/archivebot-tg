@@ -29,13 +29,13 @@
 
 > 认领/完成任务后必须更新本表（含 commit 引用）。其他进度描述（如 README）与本表冲突时，以本表为准。
 
-**最后更新：2026-09-01（M9 7c00f2b · 重试 819796a · 限流 t_fd0a2028 · CSRF t_e20cd095 · 存储清理 cbfe4b2 · Bot 单测 0124b95）**
+**最后更新：2026-09-01（Phase 2 视频交付 t_1fb0ee77 · M9 7c00f2b · 重试 819796a · 限流 t_fd0a2028 · CSRF t_e20cd095 · 存储清理 cbfe4b2 · Bot 单测 0124b95）**
 
 | 里程碑 | 状态 | 说明 | 关键 commit |
 |---|---|---|---|
 | M0 基础设施 | ✅ 完成 | 脚手架、Docker(3.12)、CI(ruff+pytest+alembic)、Alembic 迁移（**修复：CI 原因 `storage/` gitignore 屏蔽 `app/storage` 在 fresh checkout 必挂，本次修复**） | f5104fc → a8d88ef+ |
 | M1 数据层与 i18n | ✅ 完成 | SQLAlchemy 模型/枚举、zh-CN/en-US 全量文案 | f5104fc |
-| M2 归档核心管道 | ✅ 完成并 E2E 验证 | 文本类平台（web/微信/Reddit/X/小红书/微博/知乎）；**视频平台未接入**；本地+容器内真实抓取 E2E-OK | f5104fc → 9de57a4 |
+| M2 归档核心管道 | ✅ 完成并 E2E 验证 | 文本类平台（web/微信/Reddit/X/小红书/微博/知乎）；**视频平台已接入（Phase 2 t_1fb0ee77）：youtube/bilibili/douyin/kuaishou/instagram → fetcher.fetch_video 产出 VideoResult(video_path) → runner.run_video → jobs send_video 交付（复用 50MB 预检），TikTok 尚无 ArchiveBOT service 未适配**；本地+容器内真实抓取 E2E-OK | f5104fc → 9de57a4 · t_1fb0ee77 |
 | M3 任务系统 | ✅ 完成并容器内验证 | rq 队列、状态机、取消、并发限制；rq 消费全链路打通 | f5104fc → 9de57a4 |
 | M4 Telegram 用户端 | ✅ 完成 | 全部 handler + i18n + 审批流；**真实 token 的交付联调待做** | f5104fc |
 | M5 存储管理 | ✅ 完成 | 800MB/1GB/200MB、file_id 历史（**修复：`app/storage/` 被 `.gitignore storage/` 屏蔽未入库，已改为 `/storage/` 并纳入版本控制**；**软限后台自动清理已接线 cbfe4b2**：任务完成后查 storage.over_soft→清理到 target，保护运行中/当前目录，STORAGE_CLEANUP 审计） | f5104fc → a8d88ef+ · cbfe4b2 |
@@ -45,8 +45,8 @@
 | M9 部署与文档 | 🔶 大部分 | README/AGENTS/架构文档齐；**生产部署手册 docs/04-deployment.md 已写**（compose 生产化+PostgreSQL 切换+备份/日志/SSRF/安全清单）；真实 VPS 15 分钟演练未做 | 9de57a4 + 7c00f2b |
 
 **下一步优先级**（详见各里程碑小节的验收标准）：
-1. 真实 `TELEGRAM_BOT_TOKEN` 的 `docker compose up --build` 交付联调（打通 §13 全链路）
-2. Cookie Profile 登录网站、视频平台交付（Phase 2 起步）
+1. 真实 `TELEGRAM_BOT_TOKEN` 的 `docker compose up --build` 交付联调（打通 §13 全链路，含视频 send_video）
+2. Cookie Profile 登录网站、TikTok 视频适配（ArchiveBOT 尚无 tiktok service）、其余 Phase 2 平台
 
 ---
 
