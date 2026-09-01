@@ -8,7 +8,9 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 
 from app.admin.auth import create_session, log_login, login_required, read_session, verify_password
+from app.admin.ratelimit import login_throttle
 from app.database.database import SessionLocal
+from app.database.enums import AuditAction
 from app.database.models import AuditLog, Task, User
 from app.database.services import audit
 from app.storage.manager import get_storage
@@ -18,6 +20,27 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin")
 templates = Jinja2Templates(directory="app/admin/templates")
+
+LoginLockedMessage = "Too many failed attempts. Please try again later."
+
+
+def _client_ip(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
+def _audit_lockout(request: Request, ip: str) -> None:
+    """锁定事件落库（规格 §50 审计要求）。"""
+    db = SessionLocal()
+    try:
+        audit(
+            db,
+            action=AuditAction.ADMIN_LOCKOUT,
+            target_type="web_admin",
+            details={"ip": ip, "client_host": request.client.host if request.client else None},
+        )
+        db.commit()
+    finally:
+        db.close()
 
 
 def _render(request: Request, name: str, **ctx):
@@ -32,15 +55,27 @@ def _render(request: Request, name: str, **ctx):
 async def login_page(request: Request):
     if read_session(request):
         return RedirectResponse("/admin/", status_code=303)
+    ip = _client_ip(request)
+    if login_throttle.is_blocked(ip):
+        return _render(request, "login.html", error=LoginLockedMessage)
     return _render(request, "login.html", error=None)
 
 
 @router.post("/login")
 async def login_submit(request: Request, password: str = Form(...)):
+    ip = _client_ip(request)
+    if login_throttle.is_blocked(ip):
+        log_login(request, False, reason="locked")
+        return _render(request, "login.html", error=LoginLockedMessage)
     ok = verify_password(password)
-    log_login(request, ok)
     if not ok:
+        triggered = login_throttle.record_failure(ip)
+        log_login(request, False, reason="lockout" if triggered else None)
+        if triggered:
+            _audit_lockout(request, ip)
         return _render(request, "login.html", error="Invalid password")
+    login_throttle.record_success(ip)
+    log_login(request, True)
     response = RedirectResponse("/admin/", status_code=303)
     response.set_cookie("admin_session", create_session(), max_age=86400, httponly=True, samesite="lax")
     return response

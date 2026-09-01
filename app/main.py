@@ -5,6 +5,7 @@ import logging
 import uvicorn
 from fastapi import FastAPI
 
+from app.admin.ratelimit import AdminRateLimitMiddleware, request_limiter
 from app.admin.routes import router as admin_router
 from app.config import get_settings
 from app.database.database import init_db
@@ -15,6 +16,7 @@ logging.basicConfig(
 )
 
 app = FastAPI(title="ArchiveBOT Admin", version="0.1.0")
+app.add_middleware(AdminRateLimitMiddleware, limiter=request_limiter)
 app.include_router(admin_router)
 
 

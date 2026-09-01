@@ -59,14 +59,17 @@ def verify_password(password: str) -> bool:
     return compare_digest(password, expected)
 
 
-def log_login(request: Request, success: bool) -> None:
+def log_login(request: Request, success: bool, *, reason: str | None = None) -> None:
     db = SessionLocal()
     try:
+        details = {"success": success, "ip": request.client.host if request.client else None}
+        if reason:
+            details["reason"] = reason
         audit(
             db,
             action=AuditAction.ADMIN_LOGIN,
             target_type="web_admin",
-            details={"success": success, "ip": request.client.host if request.client else None},
+            details=details,
         )
         db.commit()
     finally:
