@@ -26,3 +26,7 @@ logs/
 .idea/
 .vscode/
 .DS_Store
+
+# Hermes kanban worktrees / serena local
+.worktrees/
+.serena/
