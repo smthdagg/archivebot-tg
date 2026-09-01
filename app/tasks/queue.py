@@ -41,6 +41,25 @@ def enqueue_task(task_id: int, *, job_timeout: int = 1800) -> None:
     logger.info("enqueued task %s", task_id)
 
 
+def enqueue_task_retry(task_id: int, attempt: int, *, job_timeout: int = 1800) -> None:
+    """失败自动重试入队（M7）。
+
+    重试 job 用派生 job id ``task-{id}-r{attempt}``，而不是复用原始
+    ``task-{id}``：rq 的 enqueue 默认不查重，若在原始 job 仍在运行时用同一
+    job_id 重入队，会覆盖共享的 ``rq:job:<id>`` Redis 键，导致队列里的重试
+    job 数据被当前 job 的收尾逻辑覆写。派生唯一 id 后，去重由 Task 状态机
+    幂等负担（``status != QUEUED`` 时 _process 直接跳过）。
+    """
+    queue = get_queue()
+    queue.enqueue(
+        "app.tasks.jobs.process_task",
+        task_id,
+        job_id=f"task-{task_id}-r{attempt}",
+        job_timeout=job_timeout,
+    )
+    logger.info("retry enqueued task %s (attempt %s)", task_id, attempt)
+
+
 def queue_stats() -> dict:
     queue = get_queue()
     return {
