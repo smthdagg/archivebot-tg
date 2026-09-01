@@ -39,6 +39,7 @@
 
   "archive.completed": "📚 Archive Completed\n\n\"{title}\"\n\nSource: {source}\nAuthor: {author}\nPublished: {published}\n\n{excerpt}\n\n🔗 Original\n{url}\n\n📦 Generated:\n{outputs}",
   "archive.output_summary": "PDF · Markdown · {image_count} Images",
+  "archive.output_video": "Video",
   "archive.output_pdf": "PDF",
   "archive.output_markdown": "Markdown",
   "archive.output_images": "{image_count} Images",

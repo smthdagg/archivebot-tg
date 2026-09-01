@@ -41,6 +41,24 @@ async def send_document(
     return file_id
 
 
+async def send_video(
+    chat_id: int,
+    file_path: Path,
+    *,
+    caption: str | None = None,
+    reply_markup: InlineKeyboardMarkup | None = None,
+) -> str:
+    """上传视频文件到 Telegram，返回 file_id（规格 §13，Phase 2 视频交付）。"""
+    bot = get_bot()
+    video = FSInputFile(str(file_path))
+    message = await bot.send_video(
+        chat_id, video, caption=caption, reply_markup=reply_markup
+    )
+    file_id = message.video.file_id
+    logger.info("uploaded video %s -> %s (%s)", file_path.name, file_id, message.video.file_size)
+    return file_id
+
+
 async def send_message(
     chat_id: int,
     text: str,

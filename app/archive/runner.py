@@ -141,8 +141,48 @@ def _write_metadata(result: ArchiveResult, archive_time: datetime) -> None:
         "image_count": result.image_count,
         "markdown": str(result.markdown_path.name) if result.markdown_path else None,
         "pdf": str(result.pdf_path.name) if result.pdf_path else None,
+        "video": str(result.video_path.name) if result.video_path else None,
         "archived_at": archive_time.isoformat(),
     }
     (result.task_dir / "metadata.json").write_text(
         json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+
+
+def run_video(
+    *,
+    task_dir: Path,
+    url: str,
+    platform: Platform,
+    archive_time: datetime | None = None,
+    on_status: Callable[[TaskStatus], None] | None = None,
+) -> ArchiveResult:
+    """视频类平台（youtube/bilibili/douyin/kuaishou/instagram）的归档。
+
+    只产出 video 文件（内容抓取→落盘），不生成 MD/PDF/图片。
+    """
+    from app.archive.fetcher import fetch_video
+    from app.archive.ssrf import validate_url
+
+    archive_time = archive_time or datetime.now(timezone.utc)
+
+    # worker 侧 SSRF 复验
+    if not validate_url(url):
+        raise FetchError("URL failed SSRF validation", code=ErrorCode.INVALID_URL)
+
+    if on_status:
+        on_status(TaskStatus.FETCHING)
+    video = fetch_video(url, platform, task_dir)
+
+    result = ArchiveResult(
+        task_dir=task_dir,
+        platform=platform.value,
+        title=video.title,
+        author=video.author or video.sitename,
+        sitename=video.sitename,
+        published_at=video.published_at,
+        source_url=url,
+        video_path=video.video_path,
+    )
+    _write_metadata(result, archive_time)
+    return result

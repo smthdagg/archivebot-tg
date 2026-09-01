@@ -39,6 +39,7 @@
 
   "archive.completed": "📚 归档完成\n\n《{title}》\n\n来源：{source}\n作者：{author}\n发布时间：{published}\n\n{excerpt}\n\n🔗 原文\n{url}\n\n📦 已生成：\n{outputs}",
   "archive.output_summary": "PDF · Markdown · {image_count} Images",
+  "archive.output_video": "视频",
   "archive.output_pdf": "PDF",
   "archive.output_markdown": "Markdown",
   "archive.output_images": "{image_count} Images",

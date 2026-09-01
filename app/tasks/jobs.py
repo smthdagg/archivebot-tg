@@ -8,7 +8,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 
-from app.archive.runner import run_archive
+from app.archive.runner import run_archive, run_video
 from app.bot import delivery
 from app.bot.i18n import t
 from app.config import get_settings
@@ -81,6 +81,8 @@ def _process(db, task_id: int) -> dict:
         return {"status": TaskStatus.FAILED}
 
     output_types = [OutputType(v) for v in (task.output_types or [])]
+    platform = Platform(task.platform) if task.platform else Platform.WEB
+    is_video_platform = platform.value in Platform.video_platforms()
 
     def on_status(status: TaskStatus) -> None:
         task_manager.set_status(db, task, status)
@@ -97,21 +99,29 @@ def _process(db, task_id: int) -> dict:
         on_status(TaskStatus.FETCHING)
         on_progress()
 
-        result = run_archive(
-            task_dir=task_dir,
-            url=task.url,
-            platform=Platform(task.platform) if task.platform else Platform.WEB,
-            output_types=output_types,
-            cookie_profile=task.cookie_profile,
-            on_status=lambda s: (on_status(s), on_progress()),
-        )
+if is_video_platform:
+            result = run_video(
+                task_dir=task_dir,
+                url=task.url,
+                platform=platform,
+                on_status=lambda s: (on_status(s), on_progress()),
+            )
+        else:
+            result = run_archive(
+                task_dir=task_dir,
+                url=task.url,
+                platform=platform,
+                output_types=output_types,
+                cookie_profile=task.cookie_profile,
+                on_status=lambda s: (on_status(s), on_progress()),
+            )
 
         on_progress()
 
         # ---- 上传 Telegram（规格 §13/§37）----
         on_status(TaskStatus.UPLOADING)
         uploaded, skipped = asyncio.run(_upload_all(db, task, result))
-        if not uploaded and (result.pdf_path or result.markdown_path or result.images):
+        if not uploaded and (result.pdf_path or result.markdown_path or result.images or result.video_path):
             raise TaskLimitError(ErrorCode.TELEGRAM_UPLOAD_FAILED, "No artifact delivered")
         if skipped:
             logger.info("task %s skipped oversized artifacts: %s", task.id, skipped)
@@ -188,11 +198,14 @@ async def _upload_all(db, task: Task, result) -> tuple[dict[str, str], list[str]
     uploaded: dict[str, str] = {}
     skipped: list[str] = []
 
-    async def _upload(file_type: FileType, path, caption: str | None = None) -> None:
+    async def _upload(file_type: FileType, path, caption: str | None = None, *, is_video: bool = False) -> None:
         if path.stat().st_size > max_bytes:
             skipped.append(path.name)
             return
-        file_id = await delivery.send_document(task.chat_id, path, caption=caption)
+        if is_video:
+            file_id = await delivery.send_video(task.chat_id, path)
+        else:
+            file_id = await delivery.send_document(task.chat_id, path, caption=caption)
         db.add(File(
             task_id=task.id,
             user_id=task.user_id,
@@ -204,6 +217,8 @@ async def _upload_all(db, task: Task, result) -> tuple[dict[str, str], list[str]
         ))
         uploaded[file_type.value] = file_id
 
+    if result.video_path is not None:
+        await _upload(FileType.VIDEO, result.video_path, is_video=True)
     if result.pdf_path is not None:
         await _upload(FileType.PDF, result.pdf_path)
     if result.markdown_path is not None:
@@ -220,6 +235,8 @@ def _completion_text(task: Task, lang: str) -> str:
     from app.database.enums import FileType
 
     outputs = []
+    if any(f.type == FileType.VIDEO.value for f in task.files):
+        outputs.append(t(lang, "archive.output_video"))
     if any(f.type == FileType.PDF.value for f in task.files):
         outputs.append(t(lang, "archive.output_pdf"))
     if any(f.type == FileType.MARKDOWN.value for f in task.files):

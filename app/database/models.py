@@ -93,7 +93,7 @@ class File(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id"), index=True)
     user_id: Mapped[int] = mapped_column(BigInteger, index=True)
-    type: Mapped[str] = mapped_column(String(16))  # PDF / MARKDOWN / IMAGES_ZIP / COVER
+    type: Mapped[str] = mapped_column(String(16))  # PDF / MARKDOWN / IMAGES_ZIP / COVER / VIDEO
     filename: Mapped[str] = mapped_column(String(255))
     size: Mapped[int] = mapped_column(Integer, default=0)
     local_path: Mapped[str | None] = mapped_column(Text, nullable=True)
