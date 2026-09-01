@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="cards">
+  <div class="card"><div class="num">{{ users_total }}</div><div class="label">Users</div></div>
+  <div class="card"><div class="num">{{ users_pending }}</div><div class="label">Pending</div></div>
+  <div class="card"><div class="num">{{ users_active }}</div><div class="label">Active</div></div>
+  <div class="card"><div class="num">{{ tasks_today }}</div><div class="label">Tasks Today</div></div>
+  <div class="card"><div class="num">{{ tasks_failed }}</div><div class="label">Failed</div></div>
+  <div class="card"><div class="num">{{ storage_mb }} MB</div><div class="label">Storage / {{ storage_limit_mb }} MB</div></div>
+  <div class="card"><div class="num">{{ queue.waiting }}</div><div class="label">Queue Waiting</div></div>
+</div>
+{% endblock %}

@@ -1,0 +1,13 @@
+.git
+.gitignore
+.env
+data
+storage
+tests
+docs
+*.md
+*.png
+*.html
+tools
+tampermonkey
+diagnostics

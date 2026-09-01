@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Login · ArchiveBOT Admin{% endblock %}
+{% block content %}
+<div class="login-card">
+  <h2>ArchiveBOT Admin</h2>
+  <form method="post" action="/admin/login">
+    <div class="form-row">
+      <input type="password" name="password" placeholder="Password" autofocus required>
+    </div>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <button type="submit">Login</button>
+  </form>
+</div>
+{% endblock %}

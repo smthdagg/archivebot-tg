@@ -1,0 +1,62 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+
+  bot:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: sqlite:////app/data/archivebot.db
+      STORAGE_DIR: /storage
+      REDIS_URL: redis://redis:6379/0
+    command: ["python", "-m", "app.bot.main"]
+    volumes:
+      - ./app:/app/app
+      - ./vendor/ArchiveBOT:/app/vendor/ArchiveBOT
+      - ./data:/app/data
+      - ./storage:/storage
+    depends_on:
+      - redis
+
+  api:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: sqlite:////app/data/archivebot.db
+      STORAGE_DIR: /storage
+      REDIS_URL: redis://redis:6379/0
+    command: ["python", "-m", "app.main"]
+    ports:
+      - "${WEB_ADMIN_PORT:-8080}:8080"
+    volumes:
+      - ./app:/app/app
+      - ./vendor/ArchiveBOT:/app/vendor/ArchiveBOT
+      - ./data:/app/data
+      - ./storage:/storage
+    depends_on:
+      - redis
+
+  worker:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: sqlite:////app/data/archivebot.db
+      STORAGE_DIR: /storage
+      REDIS_URL: redis://redis:6379/0
+    command: ["python", "-m", "app.tasks.worker"]
+    volumes:
+      - ./app:/app/app
+      - ./vendor/ArchiveBOT:/app/vendor/ArchiveBOT
+      - ./data:/app/data
+      - ./storage:/storage
+    depends_on:
+      - redis
+
+volumes:
+  redis-data:

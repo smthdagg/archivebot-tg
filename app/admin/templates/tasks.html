@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Tasks</h2>
+<table>
+  <tr><th>ID</th><th>User</th><th>Platform</th><th>Title</th><th>Status</th><th>Outputs</th><th>Created</th></tr>
+  {% for t in tasks %}
+  <tr>
+    <td>{{ t.id }}</td>
+    <td>{{ t.user_id }}</td>
+    <td>{{ t.platform or '-' }}</td>
+    <td>{{ (t.title or t.url)[:40] }}</td>
+    <td><span class="pill {{ 'ok' if t.status=='COMPLETED' else ('bad' if t.status in ['FAILED','CANCELLED'] else 'warn') }}">{{ t.status }}</span></td>
+    <td>{{ t.output_types|join(', ') if t.output_types else '-' }}</td>
+    <td class="muted">{{ t.created_at.strftime('%Y-%m-%d %H:%M') if t.created_at else '-' }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

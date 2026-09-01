@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# 运行期数据（本仓库不提交）
+data/
+storage/
+*.db
+*.sqlite3
+
+# 环境与密钥
+.env
+*.env.local
+
+# 日志
+logs/
+*.log
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store

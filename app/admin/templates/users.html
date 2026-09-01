@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Users</h2>
+<p class="muted">Filter: <a href="/admin/users">All</a> · <a href="/admin/users?status=ACTIVE">Active</a> · <a href="/admin/users?status=PENDING">Pending</a> · <a href="/admin/users?status=DISABLED">Disabled</a></p>
+<table>
+  <tr><th>ID</th><th>Telegram ID</th><th>Username</th><th>Role</th><th>Status</th><th>Created</th><th>Actions</th></tr>
+  {% for u in users %}
+  <tr>
+    <td>{{ u.id }}</td>
+    <td>{{ u.telegram_id }}</td>
+    <td>{{ u.username or '-' }}</td>
+    <td><span class="pill">{{ u.role }}</span></td>
+    <td><span class="pill {{ 'ok' if u.status=='ACTIVE' else ('warn' if u.status=='PENDING' else 'bad') }}">{{ u.status }}</span></td>
+    <td class="muted">{{ u.created_at.strftime('%Y-%m-%d') if u.created_at else '-' }}</td>
+    <td>
+      <form method="post" action="/admin/users/{{ u.id }}/action" style="display:inline">
+        {% if u.status == 'PENDING' %}<button name="action" value="approve">Approve</button>{% endif %}
+        {% if u.status == 'ACTIVE' %}<button name="action" value="disable" class="btn ghost">Disable</button>{% endif %}
+        {% if u.status == 'DISABLED' %}<button name="action" value="enable" class="btn ghost">Enable</button>{% endif %}
+        <button name="action" value="delete" class="btn ghost">Delete</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

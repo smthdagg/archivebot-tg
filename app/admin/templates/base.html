@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}ArchiveBOT Admin{% endblock %}</title>
+  <style>
+    :root { --bg:#f5f6f8; --card:#fff; --line:#e2e5ea; --accent:#2f6feb; --muted:#6b7280; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:-apple-system,"PingFang SC","Noto Sans CJK SC",sans-serif; background:var(--bg); color:#1f2328; }
+    .wrap { max-width:1100px; margin:0 auto; padding:24px 16px 64px; }
+    header { display:flex; align-items:center; gap:16px; padding:16px 0; border-bottom:1px solid var(--line); margin-bottom:24px; }
+    header h1 { font-size:18px; margin:0; }
+    nav a { margin-right:14px; color:var(--muted); text-decoration:none; font-size:14px; }
+    nav a.active, nav a:hover { color:var(--accent); }
+    .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:14px; margin-bottom:24px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; }
+    .card .num { font-size:26px; font-weight:600; }
+    .card .label { color:var(--muted); font-size:13px; margin-top:4px; }
+    table { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:10px; overflow:hidden; font-size:13px; }
+    th, td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); }
+    th { background:#fafbfc; color:var(--muted); font-weight:500; }
+    .pill { display:inline-block; padding:2px 10px; border-radius:999px; font-size:12px; background:#eef1f6; }
+    .pill.ok { background:#e6f7ee; color:#1a7f37; }
+    .pill.warn { background:#fff4e5; color:#b45309; }
+    .pill.bad { background:#fdeaea; color:#c0392b; }
+    button, .btn { background:var(--accent); color:#fff; border:none; border-radius:8px; padding:8px 14px; font-size:13px; cursor:pointer; text-decoration:none; display:inline-block; }
+    .btn.ghost { background:#eef1f6; color:#1f2328; }
+    .form-row { margin-bottom:14px; }
+    input[type=password], input[type=text], select { padding:8px 10px; border:1px solid var(--line); border-radius:8px; font-size:14px; width:100%; }
+    .login-card { max-width:360px; margin:80px auto; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:28px; }
+    .error { color:#c0392b; font-size:13px; margin-top:8px; }
+    .muted { color:var(--muted); font-size:12px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    {% if page %}
+    <header>
+      <h1>📚 ArchiveBOT Admin</h1>
+      <nav>
+        <a href="/admin/" class="{{ 'active' if page=='dashboard' }}">Dashboard</a>
+        <a href="/admin/users" class="{{ 'active' if page=='users' }}">Users</a>
+        <a href="/admin/tasks" class="{{ 'active' if page=='tasks' }}">Tasks</a>
+        <a href="/admin/logs" class="{{ 'active' if page=='logs' }}">Logs</a>
+        <a href="/admin/logout">Logout</a>
+      </nav>
+    </header>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </div>
+</body>
+</html>

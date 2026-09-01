@@ -1,0 +1,3 @@
+[submodule "vendor/ArchiveBOT"]
+	path = vendor/ArchiveBOT
+	url = https://github.com/smthdagg/ArchiveBOT.git
