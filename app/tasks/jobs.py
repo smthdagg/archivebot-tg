@@ -102,6 +102,7 @@ def _process(db, task_id: int) -> dict:
             url=task.url,
             platform=Platform(task.platform) if task.platform else Platform.WEB,
             output_types=output_types,
+            cookie_profile=task.cookie_profile,
             on_status=lambda s: (on_status(s), on_progress()),
         )
 

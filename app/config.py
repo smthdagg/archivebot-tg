@@ -1,9 +1,11 @@
 """应用配置：环境变量加载与校验（对应设计规格 §45）。"""
 
+import json
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -63,6 +65,47 @@ class Settings(BaseSettings):
     # 透明代理的 fake-IP DNS 会把所有域名解析到该段，按私有地址拦截会使
     # 代理环境下全部抓取失效。该段不可在公网路由，豁免不引入内网风险。
     ssrf_allowed_cidrs: str = "198.18.0.0/15"
+
+    # ---- Cookie Profile（Phase 2，登录类网站）----
+    # 用户自备 cookie，仅在用户自己登录过的网站使用（规格红线，不用于绕过付费墙）。
+    # 结构：profile 名 → { 平台 → [Cookie-Editor 格式 cookie 字典] }。
+    # 加载来源：COOKIE_PROFILES（JSON 字符串）与/或 COOKIE_PROFILES_FILE（JSON 文件）。
+    cookie_profiles: dict[str, dict[str, list[dict[str, Any]]]] = Field(default_factory=dict)
+    cookie_profiles_file: str = ""
+
+    @model_validator(mode="after")
+    def _load_cookie_profiles_file(self) -> "Settings":
+        if self.cookie_profiles_file:
+            path = Path(self.cookie_profiles_file)
+            if not path.exists():
+                raise ValueError(f"COOKIE_PROFILES_FILE not found: {path}")
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError as e:
+                raise ValueError(f"COOKIE_PROFILES_FILE invalid JSON: {e}") from e
+            if not isinstance(data, dict):
+                raise ValueError("COOKIE_PROFILES_FILE must be a JSON object (profile → platforms)")
+            merged = dict(self.cookie_profiles)
+            merged.update(data)
+            object.__setattr__(self, "cookie_profiles", merged)
+        return self
+
+    @field_validator("cookie_profiles")
+    @classmethod
+    def _validate_cookie_profiles(cls, v: dict) -> dict:
+        for name, platforms in v.items():
+            if not isinstance(name, str) or not name.strip():
+                raise ValueError("cookie profile name must be a non-empty string")
+            if not isinstance(platforms, dict):
+                raise ValueError(
+                    f"cookie profile {name!r} must map platform → list of cookies"
+                )
+            for platform, cookies in platforms.items():
+                if not isinstance(cookies, list):
+                    raise ValueError(
+                        f"cookie profile {name!r} platform {platform!r} must be a list"
+                    )
+        return v
 
     @field_validator("default_language")
     @classmethod

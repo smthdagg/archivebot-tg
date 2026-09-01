@@ -71,7 +71,7 @@ def retries(monkeypatch):
 
 
 def _raisable(code: ErrorCode):
-    def _raiser(*, task_dir, url, platform, output_types, archive_time=None, on_status=None):
+    def _raiser(*, task_dir, url, platform, output_types, archive_time=None, cookie_profile=None, on_status=None):
         if on_status:
             on_status(TaskStatus.FETCHING)
         raise FetchError(f"boom {code.value}", code=code)

@@ -67,7 +67,7 @@
 | 三行原文摘要（不调用 LLM、无幻觉） | ✅ | `app/archive/excerpt.py:extract_excerpt`（取前三个有效句子） | `tests/test_excerpt.py` |
 | 任务编排状态机（FETCHING→…→产出） | ✅ | `app/archive/runner.py:run_archive`（0-8 步） | `tests/test_jobs_integration.py` |
 | SSRF 前置防护 | ✅ | `app/archive/ssrf.py:is_safe_host/validate_url` | `tests/test_ssrf.py` |
-| 登录/JS 网站（Playwright + 独立 Cookie Profile） | ❌ | —（预留 Phase 2） | — |
+| 登录/JS 网站（Playwright + 独立 Cookie Profile） | 🔶 | ✅ 注入链路已实现（Phase 2）：`app/archive/cookie_profile.py` + `fetcher.fetch_article(cookie_profile=)`；支持 wechat/xhs/reddit/zhihu（web/weibo/twitter 忽略）。**Playwright/JS 渲染路径本身留由对应服务负责**，`docs/05-cookie-profile.md` | `tests/test_cookie_profile.py` |
 | **验收**：真实 URL「提取→清洗→MD→PDF→图片→摘要」 | ✅/🔶 | `scripts/e2e_archive.py` | 历史容器内 E2E-OK；本机需 Chromium/网络重跑 |
 
 ## 4. M3 任务系统

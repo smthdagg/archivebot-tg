@@ -77,6 +77,8 @@ class Task(Base):
     # 处理中状态消息的 message_id（worker 编辑进度用）
     status_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     cancel_requested: Mapped[bool] = mapped_column(default=False)
+    # 任务指定的 Cookie Profile 名（登录类网站，Phase 2；nullable=未指定）
+    cookie_profile: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -29,7 +29,7 @@
 
 > 认领/完成任务后必须更新本表（含 commit 引用）。其他进度描述（如 README）与本表冲突时，以本表为准。
 
-**最后更新：2026-09-01（M9 7c00f2b · 重试 819796a · 限流 t_fd0a2028 · CSRF t_e20cd095 · 存储清理 cbfe4b2 · Bot 单测 0124b95）**
+**最后更新：2026-09-02（Cookie Profile Phase 2 · 登录类网站 wechat/xhs/reddit/zhihu 注入）**
 
 | 里程碑 | 状态 | 说明 | 关键 commit |
 |---|---|---|---|
@@ -46,7 +46,8 @@
 
 **下一步优先级**（详见各里程碑小节的验收标准）：
 1. 真实 `TELEGRAM_BOT_TOKEN` 的 `docker compose up --build` 交付联调（打通 §13 全链路）
-2. Cookie Profile 登录网站、视频平台交付（Phase 2 起步）
+2. 视频平台交付（youtube/bilibili/douyin/tiktok/kuaishou/instagram，Phase 2 起步）
+3. Cookie Profile 的 UI（任务选择 profile）；bilibili 等视频平台抓取接入后的 cookie 支持
 
 ---
 

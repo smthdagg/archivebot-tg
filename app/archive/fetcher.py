@@ -13,6 +13,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from app.archive import ssrf_guard
+from app.archive.cookie_profile import (
+    EXTERNAL_COOKIE_PLATFORMS,
+    CookieProfileError,
+    inject_cookies,
+    load_profiles,
+    resolve_cookies,
+)
 from app.database.enums import ErrorCode, Platform
 
 logger = logging.getLogger(__name__)
@@ -105,10 +112,16 @@ _DISPATCH: dict[Platform, tuple[str, str, str]] = {
 }
 
 
-def fetch_article(url: str, platform: Platform, task_dir: Path) -> FetchedArticle:
+def fetch_article(
+    url: str,
+    platform: Platform,
+    task_dir: Path,
+    cookie_profile: str | None = None,
+) -> FetchedArticle:
     """调用 ArchiveBOT 服务抓取并返回标准化内容。
 
-    未适配平台抛 FetchError(ErrorCode.UNKNOWN)。
+    若传入 cookie_profile，则在调用前按平台注入该 profile 的 cookie
+    （仅用于用户自己登录过的网站）。未适配平台抛 FetchError(ErrorCode.UNKNOWN)。
     """
     entry = _DISPATCH.get(platform)
     if entry is None:
@@ -120,12 +133,35 @@ def fetch_article(url: str, platform: Platform, task_dir: Path) -> FetchedArticl
     # 出网前装 requests 层守卫（幂等；覆盖 services 的 Session 与模块级 requests.get）
     ssrf_guard.ensure_installed()
 
+    # Cookie Profile 注入（Phase 2）：解析 → 归一 → 调用期间注入
+    profiles = load_profiles()
+    try:
+        cookies = resolve_cookies(profiles, cookie_profile, platform)
+    except CookieProfileError as e:
+        logger.error("cookie profile error for platform %s: %s", platform.value, e)
+        raise FetchError(str(e), code=ErrorCode.UNKNOWN) from e
+    if cookie_profile:
+        if cookies is None:
+            if platform.value in EXTERNAL_COOKIE_PLATFORMS:
+                logger.warning(
+                    "profile %r has no cookies for platform %s; fetching without cookies",
+                    cookie_profile,
+                    platform.value,
+                )
+            else:
+                logger.info(
+                    "cookie profile %r ignored for platform %s (no cookie support)",
+                    cookie_profile,
+                    platform.value,
+                )
+
     module_name, class_name, method_name = entry
     try:
         module = __import__(module_name, fromlist=[class_name])
         cls = getattr(module, class_name)
-        service = cls(base_path=str(task_dir), create_date_folders=False)
-        result = getattr(service, method_name)(url)
+        with inject_cookies(cls, platform, cookies):
+            service = cls(base_path=str(task_dir), create_date_folders=False)
+            result = getattr(service, method_name)(url)
     except ImportError as e:
         logger.error("ArchiveBOT dependency missing for %s: %s", platform, e)
         raise FetchError("ArchiveBOT backend unavailable", code=ErrorCode.UNKNOWN) from e

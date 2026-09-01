@@ -27,9 +27,13 @@ def run_archive(
     platform: Platform,
     output_types: list[OutputType],
     archive_time: datetime | None = None,
+    cookie_profile: str | None = None,
     on_status: Callable[[TaskStatus], None] | None = None,
 ) -> ArchiveResult:
     """执行一次归档，产出到 task_dir，返回结果描述。
+
+    cookie_profile：可选的 Cookie Profile 名（登录类网站，Phase 2）。
+    仅当任务显式指定时才会向 ArchiveBOT 注入 cookie。
 
     on_status：可选进度回调，收到各阶段 TaskStatus（worker 用它更新 DB 与
     Telegram 状态消息）。
@@ -45,7 +49,7 @@ def run_archive(
     # 1. 抓取（ArchiveBOT）
     if on_status:
         on_status(TaskStatus.FETCHING)
-    article = fetch_article(url, platform, task_dir)
+    article = fetch_article(url, platform, task_dir, cookie_profile=cookie_profile)
 
     # 2. 清洗
     if on_status:
