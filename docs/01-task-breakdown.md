@@ -29,7 +29,7 @@
 
 > 认领/完成任务后必须更新本表（含 commit 引用）。其他进度描述（如 README）与本表冲突时，以本表为准。
 
-**最后更新：2026-09-01（commit a8d88ef 之后，含 03-acceptance 与 gitignore 修复）**
+**最后更新：2026-09-01（commit 7c00f2b，M9 生产部署手册 docs/04 已写）**
 
 | 里程碑 | 状态 | 说明 | 关键 commit |
 |---|---|---|---|
@@ -42,7 +42,7 @@
 | M6 管理后台 | ✅ 完成 | Bot 管理中心 + Web Admin + 审计；**Web Admin CSRF 待办** | f5104fc |
 | M7 安全加固 | 🔶 大部分完成 | SSRF 三层防线/50MB 预检/RBAC/所有权校验 ✅；**重试机制未实现、细粒度限流未做** | 9de57a4 |
 | M8 测试与验收 | 🔶 大部分 | 42 个测试（单元+集成）+ E2E 脚本 + **验收清单 docs/03-acceptance.md 已整理**（逐条映射 M0-M9 与文件:函数/测试）；§61 真实 token 联调、Bot handler 单测待补 | a8d88ef+ |
-| M9 部署与文档 | 🔶 部分 | README/AGENTS/架构文档齐；**生产部署手册未写** | 9de57a4 |
+| M9 部署与文档 | 🔶 大部分 | README/AGENTS/架构文档齐；**生产部署手册 docs/04-deployment.md 已写**（compose 生产化+PostgreSQL 切换+备份/日志/SSRF/安全清单）；真实 VPS 15 分钟演练未做 | 9de57a4 + 7c00f2b |
 
 **下一步优先级**（详见各里程碑小节的验收标准）：
 1. 真实 `TELEGRAM_BOT_TOKEN` 的 `docker compose up --build` 交付联调（打通 §13 全链路）
