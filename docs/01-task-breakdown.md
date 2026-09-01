@@ -25,6 +25,33 @@
 
 ---
 
+## 0.1 状态表（多 Agent 进度唯一事实源）
+
+> 认领/完成任务后必须更新本表（含 commit 引用）。其他进度描述（如 README）与本表冲突时，以本表为准。
+
+**最后更新：2026-09-01（commit 9de57a4 之后）**
+
+| 里程碑 | 状态 | 说明 | 关键 commit |
+|---|---|---|---|
+| M0 基础设施 | ✅ 完成 | 脚手架、Docker(3.12)、CI(ruff+pytest+alembic)、Alembic 迁移 | f5104fc → 9de57a4 |
+| M1 数据层与 i18n | ✅ 完成 | SQLAlchemy 模型/枚举、zh-CN/en-US 全量文案 | f5104fc |
+| M2 归档核心管道 | ✅ 完成并 E2E 验证 | 文本类平台（web/微信/Reddit/X/小红书/微博/知乎）；**视频平台未接入**；本地+容器内真实抓取 E2E-OK | f5104fc → 9de57a4 |
+| M3 任务系统 | ✅ 完成并容器内验证 | rq 队列、状态机、取消、并发限制；rq 消费全链路打通 | f5104fc → 9de57a4 |
+| M4 Telegram 用户端 | ✅ 完成 | 全部 handler + i18n + 审批流；**真实 token 的交付联调待做** | f5104fc |
+| M5 存储管理 | ✅ 完成 | 800MB/1GB/200MB、file_id 历史 | f5104fc |
+| M6 管理后台 | ✅ 完成 | Bot 管理中心 + Web Admin + 审计；**Web Admin CSRF 待办** | f5104fc |
+| M7 安全加固 | 🔶 大部分完成 | SSRF 三层防线/50MB 预检/RBAC/所有权校验 ✅；**重试机制未实现、细粒度限流未做** | 9de57a4 |
+| M8 测试与验收 | 🔶 部分 | 42 个测试（单元+集成）+ E2E 脚本；**验收清单未整理** | 9de57a4 |
+| M9 部署与文档 | 🔶 部分 | README/AGENTS/架构文档齐；**生产部署手册未写** | 9de57a4 |
+
+**下一步优先级**（详见各里程碑小节的验收标准）：
+1. 真实 `TELEGRAM_BOT_TOKEN` 的 `docker compose up --build` 交付联调（打通 §13 全链路）
+2. Web Admin CSRF 防护（M6 遗留）
+3. 失败自动重试（`retry_count` 配置已存在但无消费逻辑，M7 遗留）
+4. Cookie Profile 登录网站、视频平台交付（Phase 2 起步）
+
+---
+
 ## M0 项目基础设施（P0）
 
 - [ ] 初始化 git 仓库（含 git flow 分支约定：main / develop / feature-*）
@@ -193,10 +220,12 @@ Web 用户端、API + API Key、Webhook、RSS、浏览器扩展、Obsidian/Zoter
 
 ---
 
-## 开发顺序建议（当前会话）
+## 开发顺序（已按此执行完毕，留作追溯）
 
 1. M0：脚手架 + 配置 + Docker（先跑通）
 2. M1：数据层 + i18n
 3. M2/M3：归档管道与任务系统骨架（先接 ArchiveBOT 通用网页 + 微信公众号）
 4. M4：Telegram 用户端核心链路（/start → URL → 格式 → 任务 → 完成消息）
 5. 随后按优先级补 M5-M9。
+
+后续新任务从「0.1 状态表」的**下一步优先级**领取；多 Agent 协作规则见仓库根 [AGENTS.md](../AGENTS.md)。

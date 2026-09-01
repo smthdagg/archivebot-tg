@@ -6,7 +6,9 @@
 
 基于 [smthdagg/ArchiveBOT](https://github.com/smthdagg/ArchiveBOT)（omnisaver）做底层内容抓取与平台适配，Telegram 网关不重复实现平台抓取逻辑。
 
-> 详细设计见 [docs/01-task-breakdown.md](docs/01-task-breakdown.md)（任务梳理）与 [docs/02-architecture.md](docs/02-architecture.md)（技术架构）。
+> 详细设计见 [docs/01-task-breakdown.md](docs/01-task-breakdown.md)（任务梳理与**进度状态表**）与 [docs/02-architecture.md](docs/02-architecture.md)（技术架构）。
+>
+> **AI Agent / 新协作者**：请先读 [AGENTS.md](AGENTS.md)（协作契约：模块边界、硬性规则、DoD、协作流程）。
 
 ---
 
@@ -51,11 +53,17 @@ docker compose up --build
 ## 本地开发
 
 ```bash
+git clone --recurse-submodules <repo-url>   # 已 clone 过则: git submodule update --init --recursive
 python3.12 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 # 运行测试（不需要 Redis/Telegram）
 .venv/bin/python -m pytest tests/
 ```
+
+### 协作
+
+- 分支/提交/DoD/进度同步规则见 [AGENTS.md](AGENTS.md)；进度以 [docs/01 状态表](docs/01-task-breakdown.md) 为唯一事实源。
+- CI 在 push/PR 上运行 ruff + pytest + `alembic upgrade head`（.github/workflows/ci.yml）。
 
 ### 端到端自检（不依赖 Telegram）
 
