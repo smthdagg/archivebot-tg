@@ -10,7 +10,7 @@ venv/
 
 # 运行期数据（本仓库不提交）
 data/
-storage/
+/storage/
 *.db
 *.sqlite3
 
