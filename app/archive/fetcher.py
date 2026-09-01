@@ -8,12 +8,21 @@ Telegram Gateway 不重复实现平台抓取逻辑。
 
 import json
 import logging
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from app.archive import ssrf_guard
 from app.database.enums import ErrorCode, Platform
 
 logger = logging.getLogger(__name__)
+
+# 把 ArchiveBOT 子模块注册进 sys.path（其 services/utils/models 为顶层包）。
+# 必须 append 而非 insert：vendor 根目录下有自己的 app.py（Flask 入口），
+# 放在 path 前部会遮蔽本项目自己的 app 包。
+_VENDOR_ROOT = Path(__file__).resolve().parents[2] / "vendor" / "ArchiveBOT"
+if (_VENDOR_ROOT / "services" / "__init__.py").is_file() and str(_VENDOR_ROOT) not in sys.path:
+    sys.path.append(str(_VENDOR_ROOT))
 
 
 class FetchError(Exception):
@@ -108,6 +117,9 @@ def fetch_article(url: str, platform: Platform, task_dir: Path) -> FetchedArticl
             code=ErrorCode.UNKNOWN,
         )
 
+    # 出网前装 requests 层守卫（幂等；覆盖 services 的 Session 与模块级 requests.get）
+    ssrf_guard.ensure_installed()
+
     module_name, class_name, method_name = entry
     try:
         module = __import__(module_name, fromlist=[class_name])
@@ -117,6 +129,10 @@ def fetch_article(url: str, platform: Platform, task_dir: Path) -> FetchedArticl
     except ImportError as e:
         logger.error("ArchiveBOT dependency missing for %s: %s", platform, e)
         raise FetchError("ArchiveBOT backend unavailable", code=ErrorCode.UNKNOWN) from e
+    except ssrf_guard.BlockedHostError as e:
+        # 覆盖重定向跳转到内网的情况（入口只校验了首跳 URL）
+        logger.error("SSRF guard blocked fetch for %s: %s", platform.value, e)
+        raise FetchError("Blocked internal/private address", code=ErrorCode.INVALID_URL) from e
     except Exception as e:  # noqa: BLE001 - 平台服务错误种类繁多，统一归类
         logger.exception("ArchiveBOT %s failed: %s", platform, e)
         raise FetchError(_classify(platform, e), code=_classify_code(platform, e)) from e

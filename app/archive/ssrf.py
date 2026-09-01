@@ -62,6 +62,8 @@ def validate_url(url: str) -> bool:
 
 
 def _is_public_ip(ip: ipaddress._BaseAddress) -> bool:  # noqa: SLF001
+    if _in_allowed_cidrs(ip):
+        return True
     return not (
         ip.is_private
         or ip.is_loopback
@@ -70,3 +72,19 @@ def _is_public_ip(ip: ipaddress._BaseAddress) -> bool:  # noqa: SLF001
         or ip.is_reserved
         or ip.is_unspecified
     )
+
+
+def _in_allowed_cidrs(ip: ipaddress._BaseAddress) -> bool:
+    """命中运营者豁免段（如代理 fake-IP 段）则视为可抓取。"""
+    from app.config import get_settings
+
+    raw = get_settings().ssrf_allowed_cidrs.strip()
+    if not raw:
+        return False
+    for cidr in raw.split(","):
+        try:
+            if ip in ipaddress.ip_network(cidr.strip()):
+                return True
+        except ValueError:
+            continue
+    return False

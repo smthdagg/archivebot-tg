@@ -42,6 +42,7 @@
   "archive.output_pdf": "PDF",
   "archive.output_markdown": "Markdown",
   "archive.output_images": "{image_count} Images",
+  "archive.oversized_skipped": "⚠️ Skipped — the following exceed Telegram's 50MB limit:\n{files}",
 
   "archive.failed": "❌ Archive Failed\n\nReason:\n{reason}\n\nPlatform:\n{platform}\n\nURL:\n{url}",
   "error.login_required": "Login required.",

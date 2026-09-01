@@ -13,6 +13,10 @@ logger = logging.getLogger("worker")
 
 
 def main() -> None:
+    # 任何 requests 出网前先装 SSRF 守卫（含重定向每一跳，规格 §50）
+    from app.archive import ssrf_guard
+
+    ssrf_guard.ensure_installed()
     init_db()
     logger.info("worker starting, queue=%s", get_queue().name)
     from rq.worker import Worker

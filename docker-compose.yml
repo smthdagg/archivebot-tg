@@ -1,6 +1,6 @@
 services:
   redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     restart: unless-stopped
     volumes:
       - redis-data:/data
@@ -53,6 +53,7 @@ services:
     volumes:
       - ./app:/app/app
       - ./vendor/ArchiveBOT:/app/vendor/ArchiveBOT
+      - ./scripts:/app/scripts
       - ./data:/app/data
       - ./storage:/storage
     depends_on:

@@ -221,6 +221,9 @@ ArchiveBot/                        # 仓库根（archivebot-tg）
 2. **隔离**：所有 task/file 绑定 user_id；所有查询做 ownership check
 3. **Callback 安全**：服务端解析→查库→验证身份→验证所有权→验证状态→验证文件权限→RBAC
 4. **SSRF**：拒绝 127.0.0.1/localhost/内网/云 metadata；DNS 解析后二次校验
+   - 三层防线：bot 入口 `validate_url` → worker 执行前复验（`run_archive` 第 0 步）→ requests 层守卫（`ssrf_guard` 劫持 `Session.send`，**重定向每一跳**都校验，覆盖 ArchiveBOT services 内部跟随 302 跳内网的绕过）
+   - 残留风险：curl_cffi（知乎）与 Playwright 渲染不走 requests；DNS rebinding（校验在解析前，需 egress 网络策略兜底）
+   - 豁免段：`SSRF_ALLOWED_CIDRS` 默认 `198.18.0.0/15`（Clash/sing-box 等透明代理 fake-IP DNS 段；不可公网路由，豁免不引入内网风险）
 5. **限流**：重复任务、URL 数量、并发、文件大小
 6. **Web Admin**：HTTPS、Session、强密码、CSRF、Rate Limit、登录审计
 

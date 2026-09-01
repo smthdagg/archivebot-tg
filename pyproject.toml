@@ -2,7 +2,7 @@
 name = "archivebot-tg"
 version = "0.1.0"
 description = "Multi-user bilingual Telegram-driven internet document archiving and delivery platform."
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     # Telegram gateway
     "aiogram>=3.4,<4",
@@ -25,6 +25,8 @@ dependencies = [
     # ArchiveBOT runtime deps (vendored submodule requires these)
     "requests>=2.31.0",
     "curl_cffi>=0.7.0",
+    "tqdm>=4.66",
+    "playwright>=1.44",
     "beautifulsoup4>=4.12.0",
     "lxml>=4.9.0",
     "markdownify>=0.13",

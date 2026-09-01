@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: sqlite:///tmp/ci.db
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Lint (ruff)
+        run: ruff check app/ tests/
+
+      - name: Unit tests (pytest)
+        run: pytest -q
+
+      - name: DB migration smoke test (alembic)
+        run: alembic upgrade head

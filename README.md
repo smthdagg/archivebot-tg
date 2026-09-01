@@ -57,6 +57,32 @@ python3.12 -m venv .venv
 .venv/bin/python -m pytest tests/
 ```
 
+### 端到端自检（不依赖 Telegram）
+
+归档全链路（真实抓取 → Markdown → PDF → 图片 zip → 三行摘要）可单独验证：
+
+```bash
+# 本地（需 playwright chromium：.venv/bin/playwright install chromium）
+STORAGE_DIR=/tmp/ab-storage DATABASE_URL=sqlite:////tmp/ab.db \
+  .venv/bin/python scripts/e2e_archive.py "https://en.wikipedia.org/wiki/Markdown"
+
+# 容器内（验证 Chromium / CJK 字体 / ArchiveBOT 依赖）
+docker compose run --rm worker python scripts/e2e_archive.py "https://en.wikipedia.org/wiki/Markdown"
+```
+
+输出 `E2E-OK` 即链路可用。Telegram 交付链路由集成测试覆盖（`tests/test_jobs_integration.py`，stub 交付）。
+
+### 数据库迁移（Alembic）
+
+生产/长期环境用迁移管理 schema（开发与单元测试仍可用 `init_db()` 的 create_all）：
+
+```bash
+DATABASE_URL=sqlite:///data/archivebot.db alembic upgrade head    # 初始化/升级
+DATABASE_URL=... alembic revision --autogenerate -m "描述"        # 模型变更后生成迁移
+```
+
+CI（GitHub Actions）在每次 push/PR 上运行 ruff + pytest + `alembic upgrade head` 冒烟。
+
 ## 目录结构
 
 ```
@@ -86,6 +112,8 @@ data/                # SQLite 数据（volume）
 - ✅ 任务系统（Redis 队列、worker、状态机、取消、并发限制）
 - ✅ Telegram Bot（/start、审批流、URL 下载、格式选择、状态、历史、搜索、统计、设置、管理中心）
 - ✅ Web Admin（登录、Dashboard、用户/任务/日志管理）
-- ✅ 核心单元测试（31 个）
+- ✅ 测试 42 个（单元 + process_task 全链路集成）+ CI（ruff / pytest / alembic）
+- ✅ 端到端验证：本地与容器内真实抓取归档跑通（Wikipedia 页 → PDF/Markdown/图片/摘要）
+- ✅ 安全加固：requests 层 SSRF 守卫（覆盖重定向每一跳）+ worker 侧 URL 复验 + Telegram 50MB 预检
 
 待完成（见 `docs/01-task-breakdown.md`）：登录类网站 Cookie Profile、视频平台交付、批量 URL、Telegram Forward、AI Summary、PostgreSQL 迁移、生产部署手册等。

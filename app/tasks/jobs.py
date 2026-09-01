@@ -106,9 +106,11 @@ def _process(db, task_id: int) -> dict:
 
         # ---- 上传 Telegram（规格 §13/§37）----
         on_status(TaskStatus.UPLOADING)
-        uploaded = asyncio.run(_upload_all(db, task, result))
-        if not uploaded:
-            raise TaskLimitError(ErrorCode.TELEGRAM_UPLOAD_FAILED, "Telegram upload failed")
+        uploaded, skipped = asyncio.run(_upload_all(db, task, result))
+        if not uploaded and (result.pdf_path or result.markdown_path or result.images):
+            raise TaskLimitError(ErrorCode.TELEGRAM_UPLOAD_FAILED, "No artifact delivered")
+        if skipped:
+            logger.info("task %s skipped oversized artifacts: %s", task.id, skipped)
 
         # ---- 完成 ----
         task.title = result.title or task.title
@@ -121,6 +123,12 @@ def _process(db, task_id: int) -> dict:
         db.commit()
 
         asyncio.run(delivery.send_message(task.chat_id, _completion_text(task, lang)))
+        if skipped:
+            names = "\n".join(f"• {name}" for name in skipped)
+            asyncio.run(delivery.send_message(
+                task.chat_id,
+                t(lang, "archive.oversized_skipped", files=names),
+            ))
         _cleanup_local(db, task)
         return {"status": TaskStatus.COMPLETED}
 
@@ -133,7 +141,12 @@ def _process(db, task_id: int) -> dict:
         return {"status": TaskStatus.CANCELLED}
     except Exception as e:  # noqa: BLE001
         logger.exception("task %s failed", task_id)
-        code = getattr(e, "code", ErrorCode.UNKNOWN)
+        code = getattr(e, "code", None) or (
+            # aiogram 抛出的 Telegram API 错误（如 401/网络问题）归为上传失败
+            ErrorCode.TELEGRAM_UPLOAD_FAILED
+            if type(e).__module__.startswith("aiogram")
+            else ErrorCode.UNKNOWN
+        )
         message = str(e) or "Unknown error"
         _fail(db, task, code, message, lang)
         return {"status": TaskStatus.FAILED}
@@ -155,11 +168,20 @@ def _update_status_message(db, task: Task, lang: str) -> None:
     asyncio.run(delivery.edit_message(task.chat_id, task.status_message_id, text))
 
 
-async def _upload_all(db, task: Task, result) -> dict[str, str]:
-    """上传各产出文件，落库 files 表，返回 {type: file_id}。"""
+async def _upload_all(db, task: Task, result) -> tuple[dict[str, str], list[str]]:
+    """上传各产出文件，落库 files 表。
+
+    超过 Telegram Bot API 50MB 上限的文件直接跳过（Bot 端上传必失败），
+    返回 ({type: file_id}, [跳过的文件名])。
+    """
+    max_bytes = get_settings().telegram_max_file_mb * 1024 * 1024
     uploaded: dict[str, str] = {}
+    skipped: list[str] = []
 
     async def _upload(file_type: FileType, path, caption: str | None = None) -> None:
+        if path.stat().st_size > max_bytes:
+            skipped.append(path.name)
+            return
         file_id = await delivery.send_document(task.chat_id, path, caption=caption)
         db.add(File(
             task_id=task.id,
@@ -180,7 +202,7 @@ async def _upload_all(db, task: Task, result) -> dict[str, str]:
     if result.images and zip_path.exists():
         await _upload(FileType.IMAGES_ZIP, zip_path)
     db.flush()
-    return uploaded
+    return uploaded, skipped
 
 
 def _completion_text(task: Task, lang: str) -> str:

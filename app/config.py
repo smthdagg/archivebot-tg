@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     # ---- 限制与并发 ----
     max_file_size_mb: int = 200
     max_task_size_mb: int = 300
+    # Bot API sendDocument 上限 50MB，超出直接跳过上传（避免 worker 裸失败）
+    telegram_max_file_mb: int = 50
     max_user_concurrency: int = 2
     max_global_concurrency: int = 4
     task_timeout_seconds: int = 600
@@ -49,6 +51,12 @@ class Settings(BaseSettings):
     web_admin_port: int = 8080
     web_admin_secret: str = "change-me-to-a-long-random-string"
     web_admin_password: str = "change-me"
+
+    # ---- SSRF ----
+    # 豁免的 CIDR 段（逗号分隔）。默认豁免 198.18.0.0/15：Clash/sing-box 等
+    # 透明代理的 fake-IP DNS 会把所有域名解析到该段，按私有地址拦截会使
+    # 代理环境下全部抓取失效。该段不可在公网路由，豁免不引入内网风险。
+    ssrf_allowed_cidrs: str = "198.18.0.0/15"
 
     @field_validator("default_language")
     @classmethod

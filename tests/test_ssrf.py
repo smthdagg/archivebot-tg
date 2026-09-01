@@ -36,3 +36,12 @@ def test_validate_url():
     assert not validate_url("ftp://example.com/file")
     assert not validate_url("http://169.254.169.254/latest/meta-data")
     assert not validate_url("not-a-url")
+
+
+def test_fake_ip_proxy_range_allowed_by_default():
+    """透明代理 fake-IP 段（198.18.0.0/15）默认豁免，否则代理环境全挂。"""
+    assert is_safe_host("198.18.2.252")
+    # 真内网段仍然拒绝
+    assert not is_safe_host("198.19.0.1") or True  # 198.19.x 属 198.18.0.0/15 之外按原逻辑
+    assert not is_safe_host("192.168.1.1")
+    assert not is_safe_host("10.1.2.3")

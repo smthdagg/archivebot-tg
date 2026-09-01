@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1
-FROM python:3.10-slim
+# 代码使用 StrEnum（3.11+），与本地开发/CI 统一 3.12
+FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -22,7 +23,8 @@ COPY pyproject.toml ./
 RUN pip install --upgrade pip && \
     pip install aiogram fastapi uvicorn jinja2 python-multipart itsdangerous \
                 pydantic pydantic-settings sqlalchemy alembic psycopg[binary] \
-                redis rq requests curl_cffi beautifulsoup4 lxml markdownify \
+                redis rq requests curl_cffi playwright tqdm \
+                beautifulsoup4 lxml markdownify \
                 markdown trafilatura readability-lxml python-dotenv && \
     playwright install --with-deps chromium
 

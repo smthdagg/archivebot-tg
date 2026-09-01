@@ -15,7 +15,7 @@ from app.archive import markdown as markdown_mod
 from app.archive import pdf as pdf_mod
 from app.archive.fetcher import FetchError, fetch_article
 from app.archive.types import ArchiveResult
-from app.database.enums import OutputType, Platform, TaskStatus
+from app.database.enums import ErrorCode, OutputType, Platform, TaskStatus
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,12 @@ def run_archive(
     Telegram 状态消息）。
     """
     archive_time = archive_time or datetime.now(timezone.utc)
+
+    # 0. worker 侧 SSRF 复验（入口校验之外的第二道防线，规格 §50）
+    from app.archive.ssrf import validate_url
+
+    if not validate_url(url):
+        raise FetchError("URL failed SSRF validation", code=ErrorCode.INVALID_URL)
 
     # 1. 抓取（ArchiveBOT）
     if on_status:
@@ -102,7 +108,7 @@ def run_archive(
     result.excerpt = excerpt.extract_excerpt(cleaned_text)
 
     # 8. metadata.json
-    _write_metadata(task_dir, result, archive_time)
+    _write_metadata(result, archive_time)
     return result
 
 

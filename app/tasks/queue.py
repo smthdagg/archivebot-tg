@@ -16,7 +16,9 @@ _queue: Queue | None = None
 def get_redis() -> redis_lib.Redis:
     global _redis
     if _redis is None:
-        _redis = redis_lib.Redis.from_url(get_settings().redis_url, decode_responses=True)
+        # 不能开 decode_responses：rq 内部按 bytes 处理（intermediate_queue
+        # 会对 lrange 结果调 .decode()），开了解码会直接崩
+        _redis = redis_lib.Redis.from_url(get_settings().redis_url)
     return _redis
 
 
