@@ -29,7 +29,7 @@
 
 > 认领/完成任务后必须更新本表（含 commit 引用）。其他进度描述（如 README）与本表冲突时，以本表为准。
 
-**最后更新：2026-09-01（M9 7c00f2b · 重试 819796a · 限流 t_fd0a2028 · CSRF t_e20cd095 · 存储清理接线 cbfe4b2）**
+**最后更新：2026-09-01（M9 7c00f2b · 重试 819796a · 限流 t_fd0a2028 · CSRF t_e20cd095 · 存储清理 cbfe4b2 · Bot 单测 0124b95）**
 
 | 里程碑 | 状态 | 说明 | 关键 commit |
 |---|---|---|---|
@@ -41,7 +41,7 @@
 | M5 存储管理 | ✅ 完成 | 800MB/1GB/200MB、file_id 历史（**修复：`app/storage/` 被 `.gitignore storage/` 屏蔽未入库，已改为 `/storage/` 并纳入版本控制**；**软限后台自动清理已接线 cbfe4b2**：任务完成后查 storage.over_soft→清理到 target，保护运行中/当前目录，STORAGE_CLEANUP 审计） | f5104fc → a8d88ef+ · cbfe4b2 |
 | M6 管理后台 | ✅ 完成 | Bot 管理中心 + Web Admin + 审计；**Web Admin CSRF 已补**（itsdangerous double-submit，登录与用户操作 POST 校验，无/错 token → 403，test_admin_csrf.py） | f5104fc → t_e20cd095 |
 | M7 安全加固 | 🔶 大部分完成 | SSRF 三层防线/50MB 预检/RBAC/所有权校验 ✅；**失败自动重试（819796a）、Web Admin 限流+登录锁定（t_fd0a2028）、CSRF（t_e20cd095）均已实现** | 9de57a4 → ea4dc1a |
-| M8 测试与验收 | 🔶 大部分 | 42 个测试（单元+集成）+ E2E 脚本 + **验收清单 docs/03-acceptance.md 已整理**（逐条映射 M0-M9 与文件:函数/测试）；§61 真实 token 联调、Bot handler 单测待补 | a8d88ef+ |
+| M8 测试与验收 | ✅ 大部分完成 | 104 个测试（单元+集成+**Bot handler 单测** `tests/test_bot_handlers.py`：start/archive/history/menu，覆盖审批流、所有权拒门、URL 校验、取消回调）+ E2E 脚本 + **验收清单 docs/03-acceptance.md**；§61 真实 token 联调待做 | a8d88ef+ · 0124b95 |
 | M9 部署与文档 | 🔶 大部分 | README/AGENTS/架构文档齐；**生产部署手册 docs/04-deployment.md 已写**（compose 生产化+PostgreSQL 切换+备份/日志/SSRF/安全清单）；真实 VPS 15 分钟演练未做 | 9de57a4 + 7c00f2b |
 
 **下一步优先级**（详见各里程碑小节的验收标准）：
