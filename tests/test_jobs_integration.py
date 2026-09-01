@@ -62,7 +62,10 @@ def stub_delivery(monkeypatch):
 def _fake_run_archive_factory(sizes: dict[str, int]):
     """生成 run_archive 替身：在 task_dir 落真实文件，尺寸由 sizes 指定。"""
 
-    def fake_run_archive(*, task_dir, url, platform, output_types, archive_time=None, on_status=None):
+    def fake_run_archive(
+        *, task_dir, url, platform, output_types, archive_time=None,
+        cookie_profile=None, on_status=None,
+    ):
         if on_status:
             on_status(TaskStatus.FETCHING)
             on_status(TaskStatus.GENERATING_PDF)

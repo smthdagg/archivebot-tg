@@ -35,6 +35,7 @@ def create_task(
     platform: str,
     output_types: list[str],
     status_message_id: int | None = None,
+    cookie_profile: str | None = None,
 ) -> Task:
     storage = get_storage()
     if not storage.can_accept_new_task():
@@ -50,6 +51,7 @@ def create_task(
         output_types=output_types,
         storage_uuid=task_dir.name,
         status_message_id=status_message_id,
+        cookie_profile=cookie_profile,
     )
     db.add(task)
     db.flush()
