@@ -156,11 +156,11 @@
 | 数据库测试：CRUD / ownership | ✅ | `tests/test_database.py` | 同 |
 | 集成测试：队列→worker→DB 状态流转（mock 抓取/上传） | ✅ | `tests/test_jobs_integration.py`（happy / 50MB 跳过 / SSRF 拒绝） | 同 |
 | PDF 模板断言（无 margin box、页脚 Playwright 计数器） | ✅ | `tests/test_pdf.py` | 同 |
-| Bot handler 测试（aiogram mock Update） | ❌ | — | 无 |
-| 安全测试：SSRF✅；callback 越权专项 | 🔶 | `test_ssrf.py`、`test_ssrf_guard.py` | SSRF 有；callback 越权无 |
+| Bot handler 测试（aiogram mock Update） | ✅ | `tests/test_bot_handlers.py`（35 例：stub Bot/FSM + 独立 SQLite，不触网） | `pytest tests/test_bot_handlers.py` |
+| 安全测试：SSRF✅；callback 越权专项 | ✅ | `test_ssrf.py`、`test_ssrf_guard.py` + `test_bot_handlers.py`（cancel/detail/rearchive/delete 跨用户拒门） | 同 |
 | 按规格 §61 逐条核验并记录 | 🔶 | **本文档** + 真实 token §61 联调待做 | 待 `TELEGRAM_BOT_TOKEN` |
 | CI：lint + test + build | 🔶 | `.github/workflows/ci.yml`（ruff + pytest + alembic）；**无 build 步骤** | CI 需修复后首次 green |
-| **验收**：`pytest` 全绿 | ✅ | 实测 **42 passed**（primary 与修复后的工作区） | `DATABASE_URL=… .venv/bin/python -m pytest -q` |
+| **验收**：`pytest` 全绿 | ✅ | 实测 **104 passed**（primary 与修复后的工作区） | `DATABASE_URL=… .venv/bin/python -m pytest -q` |
 
 ## 10. M9 部署与文档
 
@@ -194,4 +194,4 @@
 
 ---
 
-*验收日期：2026-09-01。实测基线：`pytest -q` → `42 passed`；`ruff check app/ tests/` 全绿；`.gitignore` 缺陷修复后 fresh checkout 可正常收集。*
+*验收日期：2026-09-01。实测基线：`pytest -q` → **104 passed**；`ruff check app/ tests/` 全绿；`.gitignore` 缺陷修复后 fresh checkout 可正常收集。*
