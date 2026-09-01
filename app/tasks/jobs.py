@@ -99,7 +99,7 @@ def _process(db, task_id: int) -> dict:
         on_status(TaskStatus.FETCHING)
         on_progress()
 
-if is_video_platform:
+        if is_video_platform:
             result = run_video(
                 task_dir=task_dir,
                 url=task.url,
