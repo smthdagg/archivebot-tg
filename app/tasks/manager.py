@@ -148,3 +148,17 @@ def global_active_task_count(db: Session) -> int:
     return db.scalar(
         select(func.count(Task.id)).where(Task.status.in_(TaskStatus.processing_statuses()))
     ) or 0
+
+
+def processing_storage_uuids(db: Session) -> list[str]:
+    """返回所有运行中（PROCESSING/UPLOADING）任务的存储目录 uuid。
+
+    供存储软限清理时作为受保护集合（规格 §32：禁删运行中文件）。
+    """
+    return list(db.scalars(
+        select(Task.storage_uuid)
+        .where(
+            Task.storage_uuid.is_not(None),
+            Task.status.in_(TaskStatus.processing_statuses()),
+        )
+    )) or []

@@ -112,7 +112,7 @@
 | 用量统计 | ✅ | `manager.py:total_size/task_size` | `tests/test_storage.py` |
 | 清理策略（最旧优先、禁删受保护 PROCESSING/UPLOADING、滑到目标） | ✅ | `app/storage/cleanup.py:CleanupService.run_cleanup` | `tests/test_storage.py:test_cleanup_deletes_oldest_and_protects_active` |
 | 硬限禁止新大任务 | ✅ | `manager.create_task` 调 `can_accept_new_task` → 抛 `STORAGE_FULL` | `tests/test_jobs_integration.py` |
-| **软限后台自动清理**（达到软限触发） | ❌ | `cleanup.cleanup_if_needed` 已定义但**无任何运行时/调度调用** | Grep 核对（仅定义处） |
+| **软限后台自动清理**（达到软限触发） | ✅ | `cleanup.cleanup_if_needed` 已接线（M5 遗留修复）：`jobs._ensure_soft_limit_cleanup` 任务完成后调用；超软限触发→保护运行中/当前目录→清理到 target→`AuditAction.STORAGE_CLEANUP` 审计；`tasks.manager.processing_storage_uuids` 提供受保护集合 | `tests/test_storage_cleanup_wiring.py`（超软限触发/保护目录/清理到目标停） |
 | 完成后删本地、DB 保留 file_id | ✅ | `jobs.py:_cleanup_local` | 代码核对 |
 | 模块已入库（不再是 gitignore 孤儿） | ✅ | `app/storage/{manager,cleanup}.py`（**本次从 gitignore 屏蔽中恢复**） | fresh checkout `pytest` 42 passed |
 | **验收**：模拟塞满 1GB → 触发清理恢复 200MB | 🔶 | — | 仅单测覆盖 `CleanupService` 逻辑；未做真实 1GB 模拟 |
@@ -184,7 +184,7 @@
 2. **Web Admin CSRF**（P0，M6/M7 遗留）：`app/admin/routes.py` 的弱校验表单（登录、`/users/{id}/action`）需加 CSRF token，当前无。
 3. **自动重试**（M7 遗留）：`config.retry_count=2` 存在但 `app/tasks/jobs.py` 无消费逻辑；失败任务需按配置重入队列。
 4. **限流 / 防重复 / URL 数量限制**（M7 遗留）：`app/bot/middleware/__init__.py` 为空；Web Admin 无 Rate Limit。
-5. **软限后台自动清理**（M5）：`cleanup.cleanup_if_needed` 已实现但未接线到 worker/调度。
+5. ~~**软限后台自动清理**（M5）~~ ✅ 已接线（cbfe4b2）：`jobs._ensure_soft_limit_cleanup` 任务完成后调用 `cleanup_if_needed`。剩余 `docs/03 §6` 验收「真实 1GB 模拟」未做。
 6. **视频平台交付**（Phase 2）：detector 已识别 youtube/bilibili/douyin 等，但 `fetcher._DISPATCH` 无条目；另需 Cookie Profile 登录网站。
 7. **系统状态 CPU/RAM 指标、独立状态 API**（M6）。
 8. **部署/运维手册 + VPS 15 分钟验收**（M9）；docker-compose 健康检查与日志轮转。
