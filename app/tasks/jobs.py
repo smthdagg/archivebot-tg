@@ -23,6 +23,7 @@ from app.database.enums import (
 )
 from app.database.models import File, Task, User
 from app.database.services import audit
+from app.storage.cleanup import cleanup_if_needed
 from app.storage.manager import get_storage
 from app.tasks import manager as task_manager
 from app.tasks.manager import TaskLimitError
@@ -132,6 +133,7 @@ def _process(db, task_id: int) -> dict:
                 t(lang, "archive.oversized_skipped", files=names),
             ))
         _cleanup_local(db, task)
+        _ensure_soft_limit_cleanup(db, task.storage_uuid)
         return {"status": TaskStatus.COMPLETED}
 
     except _Cancelled:
@@ -296,3 +298,15 @@ def _cleanup_local(db, task: Task) -> None:
     for f in task.files:
         f.deleted_at = datetime.now(timezone.utc)
     db.commit()
+
+
+def _ensure_soft_limit_cleanup(db, current_uuid: str | None) -> None:
+    """任务完成后：超过软限则后台清理到 target（M5 遗留接线）。
+
+    保护运行中任务与当前任务目录（cleanup_if_needed 内部从 DB 取运行中
+    目录并追加 current_uuid）。清理失败不影响任务完成状态（只记日志）。
+    """
+    try:
+        cleanup_if_needed(db, current_uuid=current_uuid)
+    except Exception:  # noqa: BLE001
+        logger.exception("soft-limit storage cleanup failed")

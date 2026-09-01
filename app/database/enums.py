@@ -92,6 +92,8 @@ class AuditAction(StrEnum):
     FILE_SENT = "FILE_SENT"
     FILE_DELETED = "FILE_DELETED"
     FILE_CLEANUP = "FILE_CLEANUP"
+    # Storage Log（软限后台自动清理，M5）
+    STORAGE_CLEANUP = "STORAGE_CLEANUP"
     # Admin Log
     ADMIN_LOGIN = "ADMIN_LOGIN"
     ADMIN_LOCKOUT = "ADMIN_LOCKOUT"
