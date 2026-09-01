@@ -10,8 +10,8 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.database.enums import ErrorCode, TaskStatus, UserStatus
-from app.database.models import Task, User
+from app.database.enums import ErrorCode, TaskStatus
+from app.database.models import Task
 from app.database.services import audit
 from app.storage.manager import get_storage
 

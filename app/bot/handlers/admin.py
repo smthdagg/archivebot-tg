@@ -76,7 +76,8 @@ async def pending_list(callback: types.CallbackQuery) -> None:
             created = app.created_at.strftime("%H:%M") if app.created_at else "-"
             lines.append(f"{i}️⃣ @{name}  申请时间：{created}")
         kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=str(i), callback_data=f"admappr:{app.id}") for i, app in enumerate(apps, start=1)],
+            [InlineKeyboardButton(text=str(i), callback_data=f"admappr:{app.id}")
+                    for i, app in enumerate(apps, start=1)],
             [InlineKeyboardButton(text=t(lang, "action.back"), callback_data="menu:admin")],
         ])
         await callback.message.edit_text("\n".join(lines), reply_markup=kb)

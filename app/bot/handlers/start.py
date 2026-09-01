@@ -4,7 +4,6 @@ import logging
 
 from aiogram import Router, types
 from aiogram.filters import CommandStart
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.bot.common import ensure_user, user_language
 from app.bot.i18n import t
@@ -12,7 +11,7 @@ from app.bot.keyboards import main_menu
 from app.database.database import SessionLocal
 from app.database.enums import UserStatus
 from app.database.models import UserApplication
-from app.database.services import audit, now_utc
+from app.database.services import audit
 
 logger = logging.getLogger(__name__)
 

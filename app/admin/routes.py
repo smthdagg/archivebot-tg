@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 
 from app.admin.auth import create_session, log_login, login_required, read_session, verify_password
 from app.database.database import SessionLocal
-from app.database.models import AuditLog, Task, User, UserApplication
+from app.database.models import AuditLog, Task, User
 from app.database.services import audit
 from app.storage.manager import get_storage
 from app.tasks.queue import queue_stats

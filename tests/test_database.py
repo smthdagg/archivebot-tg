@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.database.enums import TaskStatus, UserRole, UserStatus
-from app.database.models import Base, Task, User
+from app.database.models import Base
 from app.database.services import create_user, get_user_by_telegram_id
 from app.tasks import manager as task_manager
 
@@ -20,7 +20,7 @@ def db(tmp_path):
 
 
 def test_create_and_get_user(db):
-    user = create_user(db, telegram_id=1001, username="alice", language="zh-CN")
+    create_user(db, telegram_id=1001, username="alice", language="zh-CN")
     db.commit()
     fetched = get_user_by_telegram_id(db, 1001)
     assert fetched is not None

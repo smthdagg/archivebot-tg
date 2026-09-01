@@ -5,7 +5,6 @@
 """
 
 import logging
-from urllib.parse import urlparse
 
 from aiogram import F, Router, types
 from aiogram.fsm.context import FSMContext
@@ -15,7 +14,7 @@ from app.archive.detector import detect, extract_first_url, platform_label_key
 from app.archive.ssrf import validate_url
 from app.bot.common import user_language
 from app.bot.i18n import t
-from app.bot.keyboards import cancel_button, format_selector, is_admin_role
+from app.bot.keyboards import cancel_button, format_selector
 from app.config import get_settings
 from app.database.database import SessionLocal
 from app.database.enums import OutputType, TaskStatus, UserStatus
@@ -101,7 +100,8 @@ async def on_format_selected(callback: types.CallbackQuery, state: FSMContext) -
             )
             db.commit()
         except TaskLimitError as e:
-            await callback.message.answer(t(lang, "error.storage_full" if e.code == "STORAGE_FULL" else "error.unknown"))
+            key = "error.storage_full" if e.code == "STORAGE_FULL" else "error.unknown"
+            await callback.message.answer(t(lang, key))
             return
 
         status_msg = await callback.message.answer(

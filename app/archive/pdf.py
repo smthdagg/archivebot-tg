@@ -16,7 +16,15 @@ _TEMPLATE = """<!DOCTYPE html>
 <meta charset="utf-8">
 <title>{title}</title>
 <style>
-  @page {{ size: A4; margin: 18mm 16mm; @bottom-center {{ content: counter(page) " / " counter(pages); font-size: 9px; color: #888; }} }}
+  @page {{
+    size: A4;
+    margin: 18mm 16mm;
+    @bottom-center {{
+      content: counter(page) " / " counter(pages);
+      font-size: 9px;
+      color: #888;
+    }}
+  }}
   body {{ font-family: "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
          color: #222; line-height: 1.75; font-size: 14px; }}
   .meta {{ color: #666; font-size: 13px; margin: 6px 0 2px; }}

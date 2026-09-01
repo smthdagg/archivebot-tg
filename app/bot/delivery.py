@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 
 from aiogram import Bot
-from aiogram.types import BufferedInputFile, FSInputFile, InlineKeyboardMarkup
+from aiogram.types import FSInputFile, InlineKeyboardMarkup
 
 from app.config import get_settings
 

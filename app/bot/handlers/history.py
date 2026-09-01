@@ -11,10 +11,9 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.bot.common import user_language
 from app.bot.i18n import t
-from app.bot.keyboards import main_menu
 from app.database.database import SessionLocal
-from app.database.enums import FileType, TaskStatus
-from app.database.models import File, Task
+from app.database.enums import FileType
+from app.database.models import Task
 from app.database.services import audit, get_user_by_telegram_id
 from app.tasks import manager as task_manager
 from app.tasks.queue import enqueue_task
@@ -256,7 +255,9 @@ def _task_row_label(task: Task) -> str:
 async def _render_history(callback: types.CallbackQuery, db, user_id: int, lang: str, page: int) -> None:
     tasks, total = task_manager.list_user_tasks(db, user_id, page=page, per_page=PAGE_SIZE)
     if not tasks:
-        kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=t(lang, "action.back"), callback_data="menu")]])
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=t(lang, "action.back"), callback_data="menu")]
+        ])
         await callback.message.edit_text(t(lang, "history.empty"), reply_markup=kb)
         await callback.answer()
         return

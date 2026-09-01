@@ -12,7 +12,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from app.database.enums import ErrorCode, Platform
-from app.storage.manager import StorageManager
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +49,7 @@ def _collect_images(save_path: Path) -> list[Path]:
     if not img_dir.exists():
         return []
     exts = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
-    return sorted((p for p in img_dir.iterdir() if p.is_file() and p.suffix.lower() in exts))
+    return sorted(p for p in img_dir.iterdir() if p.is_file() and p.suffix.lower() in exts)
 
 
 def _from_save_result(save_path: str, source_url: str, platform: str) -> FetchedArticle:

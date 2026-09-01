@@ -10,7 +10,6 @@ from sqlalchemy import func, select
 
 from app.bot.common import user_language
 from app.bot.i18n import t
-from app.bot.keyboards import main_menu
 from app.database.database import SessionLocal
 from app.database.models import Task
 from app.database.services import get_user_by_telegram_id
@@ -100,7 +99,8 @@ async def search_execute(message: types.Message, state: FSMContext) -> None:
             title = task.title or task.url[:40]
             lines.append(f"{i}. {title}")
         kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=str(i), callback_data=f"hist:{task.id}") for i, task in enumerate(tasks, start=1)],
+            [InlineKeyboardButton(text=str(i), callback_data=f"hist:{task.id}")
+                for i, task in enumerate(tasks, start=1)],
             [InlineKeyboardButton(text=t(lang, "action.back"), callback_data="menu")],
         ])
         await message.answer("\n".join(lines), reply_markup=kb)

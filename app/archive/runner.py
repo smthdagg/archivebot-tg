@@ -9,7 +9,9 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app.archive import cleaner, excerpt, images as images_mod, markdown as markdown_mod
+from app.archive import cleaner, excerpt
+from app.archive import images as images_mod
+from app.archive import markdown as markdown_mod
 from app.archive import pdf as pdf_mod
 from app.archive.fetcher import FetchError, fetch_article
 from app.archive.types import ArchiveResult

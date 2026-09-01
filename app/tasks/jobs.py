@@ -192,7 +192,6 @@ def _completion_text(task: Task, lang: str) -> str:
         outputs.append(t(lang, "archive.output_pdf"))
     if any(f.type == FileType.MARKDOWN.value for f in task.files):
         outputs.append(t(lang, "archive.output_markdown"))
-    img_count = sum(1 for f in task.files if f.type == FileType.IMAGES_ZIP.value)
     return t(
         lang,
         "archive.completed",
