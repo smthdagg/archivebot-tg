@@ -193,7 +193,9 @@ async def _upload_all(db, task: Task, result) -> tuple[dict[str, str], list[str]
 
     超过 Telegram Bot API 50MB 上限的文件直接跳过（Bot 端上传必失败），
     返回 ({type: file_id}, [跳过的文件名])。
+    只上传用户实际选择的输出类型（marks §9：不交付未选格式）。
     """
+    selected = task.output_types or []
     max_bytes = get_settings().telegram_max_file_mb * 1024 * 1024
     uploaded: dict[str, str] = {}
     skipped: list[str] = []
@@ -221,10 +223,10 @@ async def _upload_all(db, task: Task, result) -> tuple[dict[str, str], list[str]
         await _upload(FileType.VIDEO, result.video_path, is_video=True)
     if result.pdf_path is not None:
         await _upload(FileType.PDF, result.pdf_path)
-    if result.markdown_path is not None:
+    if result.markdown_path is not None and OutputType.MARKDOWN.value in selected:
         await _upload(FileType.MARKDOWN, result.markdown_path)
     zip_path = result.task_dir / "images.zip"
-    if result.images and zip_path.exists():
+    if result.images and zip_path.exists() and OutputType.IMAGES.value in selected:
         await _upload(FileType.IMAGES_ZIP, zip_path)
     db.flush()
     return uploaded, skipped
@@ -325,6 +327,6 @@ def _ensure_soft_limit_cleanup(db, current_uuid: str | None) -> None:
     目录并追加 current_uuid）。清理失败不影响任务完成状态（只记日志）。
     """
     try:
-        cleanup_if_needed(db, current_uuid=current_uuid)
+        cleanup_if_needed(db=db, current_uuid=current_uuid)
     except Exception:  # noqa: BLE001
         logger.exception("soft-limit storage cleanup failed")

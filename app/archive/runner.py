@@ -5,6 +5,7 @@
 
 import json
 import logging
+import re
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -88,6 +89,9 @@ def run_archive(
     if OutputType.PDF in output_types:
         if on_status:
             on_status(TaskStatus.GENERATING_PDF)
+        # 把 content_html 中的 img src 从相对路径（images/xxx）改写为
+        # file:// 绝对路径，Playwright 才能渲染（规格 §11 图片内联）
+        pdf_html = _rewrite_image_srcs(cleaned_html, task_dir / "images")
         try:
             result.pdf_path = pdf_mod.build_pdf(
                 title=article.title,
@@ -95,7 +99,7 @@ def run_archive(
                 source=article.sitename or platform.value,
                 published=article.published_at,
                 url=url,
-                content_html=cleaned_html,
+                content_html=pdf_html,
                 output_path=task_dir / "article.pdf",
                 archived_at=archive_time,
             )
@@ -147,6 +151,28 @@ def _write_metadata(result: ArchiveResult, archive_time: datetime) -> None:
     (result.task_dir / "metadata.json").write_text(
         json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+
+
+def _rewrite_image_srcs(html: str, img_dir: Path) -> str:
+    """把 HTML 中的 `<img src="images/xxx">` 改写为 `file://` 绝对路径。
+
+    Playwright 渲染 PDF 时，页面没有 base URL，相对路径无法解析。
+    images/ 目录已知在 task_dir 下，转绝对路径后 Chromium 可直接加载。
+    """
+    if not img_dir.exists():
+        return html
+    prefix = f"file://{img_dir.resolve()}/"
+    img_src_re = re.compile(r'<img[^>]+src=["\']([^"\']+)["\']', re.I)
+
+    def _replace(m: re.Match) -> str:
+        src = m.group(1)
+        # 只改写已知的 images/ 相对路径；远程 URL 保持原样
+        if src.startswith("images/") or src.startswith("./images/"):
+            clean = src.removeprefix("./")
+            return f'<img src="{prefix}{clean.removeprefix("images/")}"'
+        return m.group(0)
+
+    return img_src_re.sub(_replace, html)
 
 
 def run_video(

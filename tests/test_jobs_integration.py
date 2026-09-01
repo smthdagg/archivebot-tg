@@ -130,7 +130,7 @@ def test_process_task_happy_path(db, user, stub_delivery, monkeypatch):
     assert task.excerpt.startswith("这是第一行摘要。")
 
     files = list(task.files)
-    assert {f.type for f in files} == {"PDF", "MARKDOWN", "IMAGES_ZIP"}
+    assert {f.type for f in files} == {"PDF", "MARKDOWN"}
     assert all(f.telegram_file_id.startswith("FILEID::") for f in files)
 
     # 本地文件已清理（历史依赖 telegram_file_id，规格 §13）
