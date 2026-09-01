@@ -14,6 +14,7 @@
     <td class="muted">{{ u.created_at.strftime('%Y-%m-%d') if u.created_at else '-' }}</td>
     <td>
       <form method="post" action="/admin/users/{{ u.id }}/action" style="display:inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         {% if u.status == 'PENDING' %}<button name="action" value="approve">Approve</button>{% endif %}
         {% if u.status == 'ACTIVE' %}<button name="action" value="disable" class="btn ghost">Disable</button>{% endif %}
         {% if u.status == 'DISABLED' %}<button name="action" value="enable" class="btn ghost">Enable</button>{% endif %}

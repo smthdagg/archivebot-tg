@@ -4,6 +4,7 @@
 <div class="login-card">
   <h2>ArchiveBOT Admin</h2>
   <form method="post" action="/admin/login">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="form-row">
       <input type="password" name="password" placeholder="Password" autofocus required>
     </div>

@@ -2,12 +2,13 @@
 
 import logging
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 
 from app.admin.auth import create_session, log_login, login_required, read_session, verify_password
+from app.admin.csrf import csrf_guard, generate_csrf_token, set_csrf_on_response
 from app.admin.ratelimit import login_throttle
 from app.database.database import SessionLocal
 from app.database.enums import AuditAction
@@ -44,7 +45,16 @@ def _audit_lockout(request: Request, ip: str) -> None:
 
 
 def _render(request: Request, name: str, **ctx):
-    return templates.TemplateResponse(request, name, ctx)
+    """渲染模板：注入 CSRF token 并写入 CSRF cookie（double-submit）。
+
+    登录页与受保护页面共用，保证 POST 表单都能拿到与 cookie 一致的 token。
+    """
+    token = generate_csrf_token()
+    response = templates.TemplateResponse(
+        request, name, {**ctx, "csrf_token": token, "request": request}
+    )
+    set_csrf_on_response(response, token)
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -62,7 +72,7 @@ async def login_page(request: Request):
 
 
 @router.post("/login")
-async def login_submit(request: Request, password: str = Form(...)):
+async def login_submit(request: Request, _: None = Depends(csrf_guard), password: str = Form(...)):
     ip = _client_ip(request)
     if login_throttle.is_blocked(ip):
         log_login(request, False, reason="locked")
@@ -136,7 +146,7 @@ async def users(request: Request, status: str = ""):
 
 @router.post("/users/{user_id}/action")
 @login_required
-async def user_action(request: Request, user_id: int, action: str = Form(...)):
+async def user_action(request: Request, user_id: int, _: None = Depends(csrf_guard), action: str = Form(...)):
     db = SessionLocal()
     try:
         user = db.get(User, user_id)
