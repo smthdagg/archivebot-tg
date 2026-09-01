@@ -34,6 +34,8 @@ dependencies = [
     "trafilatura>=1.6.0",
     "readability-lxml>=0.8.1",
     "python-dotenv>=1.0.0",
+    # 微信公众号解析（vendor/wechat_to_md）
+    "httpx>=0.28",
     # 视频平台交付（Phase 2）：ArchiveBOT 的 youtube/bilibili/instagram 等
     # 视频 service 均依赖 yt-dlp 下载/合并（配合系统 ffmpeg）。
     "yt-dlp>=2024.10.22",
@@ -60,6 +62,7 @@ exclude = ["tests*", "scripts*", "migrations*", "vendor*", "docs*"]
 [tool.ruff]
 line-length = 120
 target-version = "py310"
+exclude = ["vendor"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B"]

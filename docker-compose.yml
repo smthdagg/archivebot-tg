@@ -17,6 +17,7 @@ services:
     volumes:
       - ./app:/app/app
       - ./vendor/ArchiveBOT:/app/vendor/ArchiveBOT
+      - ./vendor/wechat_to_md:/app/vendor/wechat_to_md
       - ./data:/app/data
       - ./storage:/storage
     depends_on:
@@ -36,6 +37,7 @@ services:
     volumes:
       - ./app:/app/app
       - ./vendor/ArchiveBOT:/app/vendor/ArchiveBOT
+      - ./vendor/wechat_to_md:/app/vendor/wechat_to_md
       - ./data:/app/data
       - ./storage:/storage
     depends_on:
@@ -53,6 +55,7 @@ services:
     volumes:
       - ./app:/app/app
       - ./vendor/ArchiveBOT:/app/vendor/ArchiveBOT
+      - ./vendor/wechat_to_md:/app/vendor/wechat_to_md
       - ./scripts:/app/scripts
       - ./data:/app/data
       - ./storage:/storage

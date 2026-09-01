@@ -27,10 +27,12 @@ RUN pip install --upgrade pip && \
                 redis rq requests curl_cffi playwright tqdm \
                 beautifulsoup4 lxml markdownify \
                 markdown trafilatura readability-lxml python-dotenv \
+                httpx \
                 "yt-dlp>=2024.10.22" && \
     playwright install --with-deps chromium
 
 # Project sources (vendor/ArchiveBOT is mounted/checked-out by docker-compose)
 COPY app ./app
+COPY vendor/wechat_to_md ./vendor/wechat_to_md
 
 CMD ["python", "-m", "app.main"]

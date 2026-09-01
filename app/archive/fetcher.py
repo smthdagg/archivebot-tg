@@ -31,6 +31,13 @@ _VENDOR_ROOT = Path(__file__).resolve().parents[2] / "vendor" / "ArchiveBOT"
 if (_VENDOR_ROOT / "services" / "__init__.py").is_file() and str(_VENDOR_ROOT) not in sys.path:
     sys.path.append(str(_VENDOR_ROOT))
 
+# 微信公众号解析需要 wechat_to_md 包（vendor 化避免外部工具路径依赖）。
+# 用 insert 在这段注册，比 wechat_service.py 的 ~/.agent-reach/tools/wechat-article-for-ai
+# 优先，同时也服务容器内无该路径的情况。
+_WECHAT_VENDOR = Path(__file__).resolve().parents[2] / "vendor" / "wechat_to_md"
+if _WECHAT_VENDOR.is_dir() and str(_WECHAT_VENDOR.parent) not in sys.path:
+    sys.path.insert(0, str(_WECHAT_VENDOR.parent))
+
 
 class FetchError(Exception):
     def __init__(self, message: str, code: str = ErrorCode.UNKNOWN) -> None:
