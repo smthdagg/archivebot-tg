@@ -51,6 +51,12 @@ class Settings(BaseSettings):
     web_admin_port: int = 8080
     web_admin_secret: str = "change-me-to-a-long-random-string"
     web_admin_password: str = "change-me"
+    # ---- Web Admin 限流（规格 §50，M7）----
+    web_admin_rate_limit: int = 100  # /admin 全局每分钟每 IP 请求上限
+    web_admin_rate_window_seconds: int = 60
+    web_admin_login_max_failures: int = 5  # 窗口内连续失败次数
+    web_admin_login_window_seconds: int = 900
+    web_admin_login_lockout_seconds: int = 900  # 触发锁定后的临时锁定秒数（指数退避基数）
 
     # ---- SSRF ----
     # 豁免的 CIDR 段（逗号分隔）。默认豁免 198.18.0.0/15：Clash/sing-box 等

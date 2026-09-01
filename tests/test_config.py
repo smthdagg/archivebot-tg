@@ -27,6 +27,23 @@ def test_invalid_language_rejected():
         Settings(default_language="fr-FR")
 
 
+def test_web_admin_ratelimit_defaults():
+    s = Settings()
+    assert s.web_admin_rate_limit == 100
+    assert s.web_admin_rate_window_seconds == 60
+    assert s.web_admin_login_max_failures == 5
+    assert s.web_admin_login_window_seconds == 900
+    assert s.web_admin_login_lockout_seconds == 900
+
+
+def test_web_admin_ratelimit_env_override(monkeypatch):
+    monkeypatch.setenv("WEB_ADMIN_RATE_LIMIT", "50")
+    monkeypatch.setenv("WEB_ADMIN_LOGIN_MAX_FAILURES", "3")
+    s = Settings()
+    assert s.web_admin_rate_limit == 50
+    assert s.web_admin_login_max_failures == 3
+
+
 def test_bytes_properties():
     s = Settings()
     assert s.soft_limit_bytes == 800 * 1024 * 1024

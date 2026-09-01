@@ -40,7 +40,7 @@
 | M4 Telegram 用户端 | ✅ 完成 | 全部 handler + i18n + 审批流；**真实 token 的交付联调待做** | f5104fc |
 | M5 存储管理 | ✅ 完成 | 800MB/1GB/200MB、file_id 历史（**修复：`app/storage/` 被 `.gitignore storage/` 屏蔽未入库，已改为 `/storage/` 并纳入版本控制**；软限后台自动清理仍未接线见 docs/03） | f5104fc → a8d88ef+ |
 | M6 管理后台 | ✅ 完成 | Bot 管理中心 + Web Admin + 审计；**Web Admin CSRF 待办** | f5104fc |
-| M7 安全加固 | 🔶 大部分完成 | SSRF 三层防线/50MB 预检/RBAC/所有权校验 ✅；**失败自动重试已实现（819796a）、细粒度限流未做** | 9de57a4 → 819796a |
+| M7 安全加固 | 🔶 大部分完成 | SSRF 三层防线/50MB 预检/RBAC/所有权校验 ✅；**失败自动重试已实现（819796a）、Web Admin 限流+登录锁定已完成（t_fd0a2028：滑动窗口 100 次/分/IP + 登录失败锁定+指数退避）** | 9de57a4 → ea4dc1a |
 | M8 测试与验收 | 🔶 大部分 | 42 个测试（单元+集成）+ E2E 脚本 + **验收清单 docs/03-acceptance.md 已整理**（逐条映射 M0-M9 与文件:函数/测试）；§61 真实 token 联调、Bot handler 单测待补 | a8d88ef+ |
 | M9 部署与文档 | 🔶 大部分 | README/AGENTS/架构文档齐；**生产部署手册 docs/04-deployment.md 已写**（compose 生产化+PostgreSQL 切换+备份/日志/SSRF/安全清单）；真实 VPS 15 分钟演练未做 | 9de57a4 + 7c00f2b |
 
