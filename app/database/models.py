@@ -68,6 +68,8 @@ class Task(Base):
     excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)  # 三行原文摘要
     status: Mapped[str] = mapped_column(String(24), default="QUEUED", index=True)
     output_types: Mapped[list] = mapped_column(JSON, default=list)
+    # 失败自动重试已消耗次数（M7）。0=初始；耗尽配置 retry_count 后 FAILED。
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
     error_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 任务目录名（storage/tasks/<task_uuid>）

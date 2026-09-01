@@ -26,6 +26,8 @@ from app.database.services import audit
 from app.storage.manager import get_storage
 from app.tasks import manager as task_manager
 from app.tasks.manager import TaskLimitError
+from app.tasks.queue import enqueue_task_retry
+from app.tasks.retry import is_retryable
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +150,11 @@ def _process(db, task_id: int) -> dict:
             else ErrorCode.UNKNOWN
         )
         message = str(e) or "Unknown error"
+
+        # 瞬态可重试错误且未耗尽 retry_count → 状态回 QUEUED 并重入队（M7）
+        if is_retryable(code) and _schedule_retry(db, task, code, message):
+            return {"status": "RETRY"}
+
         _fail(db, task, code, message, lang)
         return {"status": TaskStatus.FAILED}
 
@@ -225,6 +232,27 @@ def _completion_text(task: Task, lang: str) -> str:
         url=task.url,
         outputs=" · ".join(outputs),
     )
+
+
+def _schedule_retry(db, task: Task, code: str, message: str) -> bool:
+    """可重试失败按配置重入队；返回 False 表示次数已耗尽需 FAILED。
+
+    把本次计数写入 ``Task.retry_count`` 并把状态回退到 QUEUED，保证重试 job
+    通过 ``_process`` 的状态机幂等门槛（status != QUEUED 会跳过），随后以
+    唯一 job id（``enqueue_task_retry``）重入队。
+    """
+    settings = get_settings()
+    attempts = (task.retry_count or 0) + 1
+    if attempts > settings.retry_count:
+        return False
+    task.retry_count = attempts
+    task.error_code = code
+    task.error_message = message
+    task_manager.set_status(db, task, TaskStatus.QUEUED)
+    db.commit()
+    enqueue_task_retry(task.id, attempts)
+    logger.info("task %s retrying, attempt %s/%s (code=%s)", task.id, attempts, settings.retry_count, code)
+    return True
 
 
 def _fail(db, task: Task, code: str, message: str, lang: str) -> None:
