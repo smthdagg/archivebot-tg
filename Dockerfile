@@ -28,6 +28,7 @@ RUN pip install --upgrade pip && \
                 beautifulsoup4 lxml markdownify \
                 markdown trafilatura readability-lxml python-dotenv \
                 httpx \
+                "camoufox[geoip]>=0.5" \
                 "yt-dlp>=2024.10.22" && \
     playwright install --with-deps chromium
 

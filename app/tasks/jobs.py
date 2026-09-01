@@ -4,7 +4,6 @@ process_task 是 rq 入口（同步函数）；内部按状态机推进，并调
 向 Telegram 交付文件与完成消息。
 """
 
-import asyncio
 import logging
 from datetime import datetime, timezone
 
@@ -120,7 +119,7 @@ def _process(db, task_id: int) -> dict:
 
         # ---- 上传 Telegram（规格 §13/§37）----
         on_status(TaskStatus.UPLOADING)
-        uploaded, skipped = asyncio.run(_upload_all(db, task, result))
+        uploaded, skipped = delivery.run_async(_upload_all(db, task, result))
         if not uploaded and (result.pdf_path or result.markdown_path or result.images or result.video_path):
             raise TaskLimitError(ErrorCode.TELEGRAM_UPLOAD_FAILED, "No artifact delivered")
         if skipped:
@@ -136,15 +135,23 @@ def _process(db, task_id: int) -> dict:
               target_type="task", target_id=task.id)
         db.commit()
 
-        asyncio.run(delivery.send_message(task.chat_id, _completion_text(task, lang)))
-        if skipped:
-            names = "\n".join(f"• {name}" for name in skipped)
-            asyncio.run(delivery.send_message(
-                task.chat_id,
-                t(lang, "archive.oversized_skipped", files=names),
-            ))
-        _cleanup_local(db, task)
-        _ensure_soft_limit_cleanup(db, task.storage_uuid)
+        # 文件已交付、任务已 COMPLETED——完成消息发送失败只记日志，
+        # 绝不能把任务翻转为 FAILED（否则触发重试 → 用户收到重复文件）
+        try:
+            delivery.run_async(delivery.send_message(task.chat_id, _completion_text(task, lang)))
+            if skipped:
+                names = "\n".join(f"• {name}" for name in skipped)
+                delivery.run_async(delivery.send_message(
+                    task.chat_id,
+                    t(lang, "archive.oversized_skipped", files=names),
+                ))
+        except Exception:  # noqa: BLE001
+            logger.exception("task %s completed but notification send failed", task.id)
+        try:
+            _cleanup_local(db, task)
+            _ensure_soft_limit_cleanup(db, task.storage_uuid)
+        except Exception:  # noqa: BLE001
+            logger.exception("task %s completed but local cleanup failed", task.id)
         return {"status": TaskStatus.COMPLETED}
 
     except _Cancelled:
@@ -152,7 +159,7 @@ def _process(db, task_id: int) -> dict:
         audit(db, action=AuditAction.TASK_CANCELLED, operator_user_id=task.user_id,
               target_type="task", target_id=task.id)
         db.commit()
-        asyncio.run(delivery.edit_message(task.chat_id, task.status_message_id or 0, t(lang, "action.cancel")))
+        delivery.run_async(delivery.edit_message(task.chat_id, task.status_message_id or 0, t(lang, "action.cancel")))
         return {"status": TaskStatus.CANCELLED}
     except Exception as e:  # noqa: BLE001
         logger.exception("task %s failed", task_id)
@@ -185,7 +192,7 @@ def _update_status_message(db, task: Task, lang: str) -> None:
         return
     key = _STATUS_I18N.get(TaskStatus(task.status), "status.queued")
     text = t(lang, "task.processing", task_id=task.id, platform=task.platform or "-", status=t(lang, key))
-    asyncio.run(delivery.edit_message(task.chat_id, task.status_message_id, text))
+    delivery.run_async(delivery.edit_message(task.chat_id, task.status_message_id, text))
 
 
 async def _upload_all(db, task: Task, result) -> tuple[dict[str, str], list[str]]:
@@ -286,7 +293,7 @@ def _fail(db, task: Task, code: str, message: str, lang: str) -> None:
     db.commit()
     try:
         reason = _error_text(code, lang)
-        asyncio.run(delivery.send_message(
+        delivery.run_async(delivery.send_message(
             task.chat_id,
             t(lang, "archive.failed", reason=reason, platform=task.platform or "-", url=task.url),
         ))

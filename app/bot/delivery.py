@@ -1,8 +1,14 @@
 """文件交付与消息发送（worker 侧）。
 
 worker 用独立的 Bot 实例（不轮询）向用户发送文件与完成消息。
+
+关键设计：worker 是同步进程（rq），异步调用通过 run_async() 在一个
+**持久事件循环**上执行。不能反复用 asyncio.run()——它每次创建并关闭
+新循环，而 aiogram Bot 的 aiohttp session 绑定在首次使用的循环上，
+循环关闭后 session 失效，后续调用抛 "Event loop is closed"。
 """
 
+import asyncio
 import logging
 from pathlib import Path
 
@@ -14,6 +20,22 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 
 _bot: Bot | None = None
+_loop: asyncio.AbstractEventLoop | None = None
+
+
+def _get_loop() -> asyncio.AbstractEventLoop:
+    """返回持久事件循环（惰性创建；意外关闭时重建并重置 Bot）。"""
+    global _loop, _bot
+    if _loop is None or _loop.is_closed():
+        _loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(_loop)
+        _bot = None  # 旧 Bot 的 session 绑定在已关闭的循环上，必须重建
+    return _loop
+
+
+def run_async(coro):
+    """在持久事件循环上执行协程（替代 asyncio.run，保持 session 存活）。"""
+    return _get_loop().run_until_complete(coro)
 
 
 def get_bot() -> Bot:

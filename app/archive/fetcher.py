@@ -205,6 +205,10 @@ def fetch_article(
 
     module_name, class_name, method_name = entry
     try:
+        if platform == Platform.WECHAT:
+            from app.archive.wechat_patch import _patch_wechat_fetch_page_html
+
+            _patch_wechat_fetch_page_html(None)
         module = __import__(module_name, fromlist=[class_name])
         cls = getattr(module, class_name)
         with inject_cookies(cls, platform, cookies):

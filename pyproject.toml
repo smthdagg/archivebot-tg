@@ -36,6 +36,8 @@ dependencies = [
     "python-dotenv>=1.0.0",
     # 微信公众号解析（vendor/wechat_to_md）
     "httpx>=0.28",
+    # ArchiveBOT 微信服务需要 camoufox 反检测浏览器（抓取公众号页面 HTML）
+    "camoufox[geoip]>=0.5",
     # 视频平台交付（Phase 2）：ArchiveBOT 的 youtube/bilibili/instagram 等
     # 视频 service 均依赖 yt-dlp 下载/合并（配合系统 ffmpeg）。
     "yt-dlp>=2024.10.22",
