@@ -53,7 +53,7 @@ _TEMPLATE = """<!DOCTYPE html>
   </div>
   <hr class="rule">
   <div class="footer">
-    Archived by ArchiveBOT · {archived_at}
+    文章来源互联网，仅供参考，如涉及商用请与财新官方联系。 · 生成时间 {archived_at}
   </div>
 </body>
 </html>
