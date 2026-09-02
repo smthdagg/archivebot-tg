@@ -188,25 +188,55 @@ def _write_metadata(result: ArchiveResult, archive_time: datetime) -> None:
 
 
 def _rewrite_image_srcs(html: str, img_dir: Path) -> str:
-    """把 HTML 中的 `<img src="images/xxx">` 改写为 `file://` 绝对路径。
+    """把 HTML 中的 `images/xxx` 图片内联为 base64 data URI。
 
-    Playwright 渲染 PDF 时，页面没有 base URL，相对路径无法解析。
-    images/ 目录已知在 task_dir 下，转绝对路径后 Chromium 可直接加载。
+    之前的 file:// 重写在 Chromium set_content 场景下受 file 访问限制且
+    正则替换会截断 alt 等属性，导致 PDF 中图片仍显示为裂图。改为 base64
+    内联后 PDF 完全自包含，渲染 100% 可复现。
     """
     if not img_dir.exists():
         return html
-    prefix = f"file://{img_dir.resolve()}/"
-    img_src_re = re.compile(r'<img[^>]+src=["\']([^"\']+)["\']', re.I)
+    import base64
+    import mimetypes
 
-    def _replace(m: re.Match) -> str:
-        src = m.group(1)
-        # 只改写已知的 images/ 相对路径；远程 URL 保持原样
-        if src.startswith("images/") or src.startswith("./images/"):
-            clean = src.removeprefix("./")
-            return f'<img src="{prefix}{clean.removeprefix("images/")}"'
-        return m.group(0)
+    from bs4 import BeautifulSoup
 
-    return img_src_re.sub(_replace, html)
+    soup = BeautifulSoup(html, "html.parser")
+    for img in soup.find_all("img"):
+        src = (img.get("src") or "").strip()
+        if not (src.startswith("images/") or src.startswith("./images/")):
+            continue
+        clean = src.removeprefix("./").removeprefix("images/")
+        # 去掉可能的 query/hash
+        clean = clean.split("?")[0].split("#")[0]
+        file_path = img_dir / clean
+        if not file_path.exists():
+            # 兼容大小写/后缀差异：按 stem 模糊匹配
+            candidates = [p for p in img_dir.iterdir() if p.stem == Path(clean).stem]
+            if candidates:
+                file_path = candidates[0]
+            else:
+                continue
+        try:
+            mime, _ = mimetypes.guess_type(str(file_path))
+            if not mime or not mime.startswith("image/"):
+                ext = file_path.suffix.lower()
+                mime = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp"}.get(ext, "image/jpeg")
+            data = file_path.read_bytes()
+            if not data:
+                continue
+            b64 = base64.b64encode(data).decode("ascii")
+            img["src"] = f"data:{mime};base64,{b64}"
+        except Exception:
+            # 降级为 file://，至少保留路径
+            try:
+                img["src"] = f"file://{file_path.resolve()}"
+            except Exception:
+                continue
+    # BeautifulSoup 会包一层 <html><body>，只返回 body 内部
+    if soup.body is not None:
+        return soup.body.decode_contents()
+    return str(soup)
 
 
 def run_video(
