@@ -37,7 +37,7 @@
 | M1 数据层与 i18n | ✅ 完成 | SQLAlchemy 模型/枚举、zh-CN/en-US 全量文案 | f5104fc |
 | M2 归档核心管道 | ✅ 完成并 E2E 验证 | 文本类平台（web/微信/Reddit/X/小红书/微博/知乎）；**视频平台已接入（Phase 2 t_1fb0ee77）：youtube/bilibili/douyin/kuaishou/instagram → fetcher.fetch_video 产出 VideoResult(video_path) → runner.run_video → jobs send_video 交付（复用 50MB 预检），TikTok 尚无 ArchiveBOT service 未适配**；**「图片」输出已改为长截图**（screenshot.py 复用 PDF 模板 full_page PNG，2x 缩放，>40MB 自动转 JPEG；产物命名 标题_YYYY-MM-DD_HHMM.ext，naming.py；Markdown/PDF/截图/ZIP 同名不同扩展；封面回退首图；image_map 数量不匹配时部分映射不再整组丢弃）；本地真实抓取 E2E-OK（132 测试全绿） | f5104fc → 9de57a4 · t_1fb0ee77 · a9bdae0 |
 | M3 任务系统 | ✅ 完成并容器内验证 | rq 队列、状态机、取消、并发限制；rq 消费全链路打通 | f5104fc → 9de57a4 |
-| M4 Telegram 用户端 | ✅ 完成 | 全部 handler + i18n + 审批流；**格式文案与历史取件已切长截图**（format.images/action.get_images → Screenshot，FileType.SCREENSHOT 新枚举，历史任务 IMAGES_ZIP 自动回退兼容）；**真实 token 的交付联调待做** | f5104fc |
+| M4 Telegram 用户端 | ✅ 完成 | 全部 handler + i18n + 审批流；**格式文案与历史取件已切长截图**（format.images/action.get_images → Screenshot，FileType.SCREENSHOT 新枚举，历史任务 IMAGES_ZIP 自动回退兼容）；**真实 token 交付联调已验证（a9bdae0，docker compose 全栈，任务 44 长截图 21.8MB 真实上传成功、file_id 落库）** | f5104fc → a9bdae0 |
 | M5 存储管理 | ✅ 完成 | 800MB/1GB/200MB、file_id 历史（**修复：`app/storage/` 被 `.gitignore storage/` 屏蔽未入库，已改为 `/storage/` 并纳入版本控制**；**软限后台自动清理已接线 cbfe4b2**：任务完成后查 storage.over_soft→清理到 target，保护运行中/当前目录，STORAGE_CLEANUP 审计） | f5104fc → a8d88ef+ · cbfe4b2 |
 | M6 管理后台 | ✅ 完成 | Bot 管理中心 + Web Admin + 审计；**Web Admin CSRF 已补**（itsdangerous double-submit，登录与用户操作 POST 校验，无/错 token → 403，test_admin_csrf.py） | f5104fc → t_e20cd095 |
 | M7 安全加固 | 🔶 大部分完成 | SSRF 三层防线/50MB 预检/RBAC/所有权校验 ✅；**失败自动重试（819796a）、Web Admin 限流+登录锁定（t_fd0a2028）、CSRF（t_e20cd095）均已实现** | 9de57a4 → ea4dc1a |
@@ -45,7 +45,7 @@
 | M9 部署与文档 | 🔶 大部分 | README/AGENTS/架构文档齐；**生产部署手册 docs/04-deployment.md 已写**（compose 生产化+PostgreSQL 切换+备份/日志/SSRF/安全清单）；真实 VPS 15 分钟演练未做 | 9de57a4 + 7c00f2b |
 
 **下一步优先级**（详见各里程碑小节的验收标准）：
-1. 真实 `TELEGRAM_BOT_TOKEN` 的 `docker compose up --build` 交付联调（打通 §13 全链路，含视频 send_video）
+1. ~~真实 `TELEGRAM_BOT_TOKEN` 的 `docker compose up --build` 交付联调~~ **已完成（2026-09-03，a9bdae0：全栈部署 + 长截图真实上传任务 44 验证通过）**；可选补充：人工在 Telegram 发 URL 走完 §13 交互全流程
 2. Cookie Profile 的 UI（任务选择 profile）；TikTok 视频适配（ArchiveBOT 尚无 tiktok service）；bilibili 等视频平台接入后的 cookie 支持
 
 ---
