@@ -11,7 +11,7 @@ SPECIAL_SITES: dict[str, dict] = {
     "caixin": {
         "display_name": "财新网",
         "domains": [".caixin.com", "weekly.caixin.com"],
-        "required": ["SA"],
+        "required": ["SA_USER_auth"],
         "ttl_days": 30,
         "platform": "web",
     },

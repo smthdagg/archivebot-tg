@@ -17,7 +17,7 @@ from app.bot.i18n import t
 from app.bot.keyboards import cancel_button, format_selector
 from app.config import get_settings
 from app.database.database import SessionLocal
-from app.database.enums import OutputType, TaskStatus, UserStatus
+from app.database.enums import OutputType, Platform, TaskStatus, UserStatus
 from app.database.services import get_user_by_telegram_id
 from app.tasks import manager as task_manager
 from app.tasks.manager import TaskLimitError
@@ -90,6 +90,25 @@ async def on_format_selected(callback: types.CallbackQuery, state: FSMContext) -
             return
 
         try:
+            # 特殊网站（财新等 WEB）按 url 自动关联可用 cookie profile
+            auto_profile = None
+            if platform == Platform.WEB.value:
+                try:
+                    from app.archive.cookie_registry import SPECIAL_SITES as _SS
+                    from app.config import get_settings as _GS
+                    _profs = _GS().cookie_profiles or {}
+                    for _k, _cfg in _SS.items():
+                        if _cfg.get("platform") != Platform.WEB.value:
+                            continue
+                        for _dom in _cfg.get("domains", []):
+                            if _dom.lstrip(".") in (url or ""):
+                                if _k in _profs:
+                                    auto_profile = _k
+                                    break
+                        if auto_profile:
+                            break
+                except Exception:
+                    pass
             task = task_manager.create_task(
                 db,
                 user_id=user.id,
@@ -97,6 +116,7 @@ async def on_format_selected(callback: types.CallbackQuery, state: FSMContext) -
                 url=url,
                 platform=platform,
                 output_types=[o.value for o in output_types],
+                cookie_profile=auto_profile,
             )
             db.commit()
         except TaskLimitError as e:
