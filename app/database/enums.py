@@ -63,6 +63,7 @@ class FileType(StrEnum):
     IMAGES_ZIP = "IMAGES_ZIP"
     COVER = "COVER"
     VIDEO = "VIDEO"
+    SCREENSHOT = "SCREENSHOT"
 
 
 # ---- 审计动作常量（设计规格 §39）----

@@ -1,4 +1,4 @@
-"""端到端归档自检：run_archive 全链路（抓取→清洗→图片→Markdown→PDF→摘要）。
+"""端到端归档自检：run_archive 全链路（抓取→清洗→图片→Markdown→PDF→长截图→摘要）。
 
 不依赖 Telegram，用于：
 - 本地：python scripts/e2e_archive.py <url>
@@ -52,12 +52,18 @@ def main() -> int:
         "markdown": {"path": str(result.markdown_path), "size": _size(result.markdown_path)},
         "pdf": {"path": str(result.pdf_path), "size": _size(result.pdf_path)},
         "image_count": result.image_count,
-        "images_zip": _size(task_dir / "images.zip"),
+        "screenshot": {"path": str(result.screenshot_path), "size": _size(result.screenshot_path)},
         "task_dir": str(task_dir),
     }
     print(json.dumps(report, ensure_ascii=False, indent=2))
 
-    ok = result.markdown_path and result.pdf_path and _size(result.pdf_path) > 0
+    ok = (
+        result.markdown_path
+        and result.pdf_path
+        and result.screenshot_path
+        and _size(result.pdf_path) > 0
+        and _size(result.screenshot_path) > 0
+    )
     print("E2E-OK" if ok else "E2E-FAIL")
     return 0 if ok else 1
 

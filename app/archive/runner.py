@@ -71,8 +71,13 @@ def run_archive(
         on_status(TaskStatus.DOWNLOADING_IMAGES)
     if article.save_path is not None:
         image_files = images_mod.copy_images(article.save_path, task_dir)
+        # 彩图封面：WEB（如 caixin #page2）无 cover.jpg，仅 avatar.jpg 时取首图
+        cover_src = article.cover
+        if cover_src is None and image_files:
+            cover_src = image_files[0]
     else:
         image_files = _collect_images(task_dir)
+        cover_src = None
 
     result = ArchiveResult(
         task_dir=task_dir,
@@ -82,7 +87,13 @@ def run_archive(
         sitename=article.sitename,
         published_at=article.published_at,
         source_url=url,
+        cover_path=cover_src,
     )
+
+    # 存档文件名：标题_YYYY-MM-DD_HHMM.ext（仅正文与图片，命名跟标题走）
+    # archive_time 已在函数入口确定（默认 now UTC），用于本次全部产物的统一时间戳
+    from app.archive.naming import archive_basename
+    _basename = archive_basename(article.title or "Untitled", archive_time)
 
     # 3b. 微信 Markdown 主路径：wechat_to_md 产物的 content.md 已含本地化图片
     # （images/xx.jpg），无需再以 cleaned_html 重新生成，避免空 HTML 导致幻觉。
@@ -106,7 +117,7 @@ def run_archive(
             md_content = article.markdown or markdown_mod.html_to_markdown(cleaned_html)
             image_map = images_mod.build_image_map(article.html, md_content, image_files)
             md_content = markdown_mod.rewrite_image_refs(md_content, image_map)
-        result.markdown_path = markdown_mod.build_markdown_file(task_dir, md_content)
+        result.markdown_path = markdown_mod.build_markdown_file(task_dir, md_content, basename=_basename)
 
     # 5. PDF
     if OutputType.PDF in output_types:
@@ -115,7 +126,10 @@ def run_archive(
         # 把内容转为 PDF 的 HTML：微信分支由 markdown 先经 markdown 渲染为 HTML，
         # 再把 img src 改写为 file:// 绝对路径（Playwright 渲染需要，规格 §11）
         if _wechat_md_raw and result.markdown_path:
-            md_path = task_dir / "article.md"
+            md_path = task_dir / f"{_basename}.md"
+            # 兼容：历史固定名 article.md 的产物已在 Markdown 阶段写出
+            if not md_path.exists() and (task_dir / "article.md").exists():
+                md_path = task_dir / "article.md"
             pdf_source_md = (
                 md_path.read_text(encoding="utf-8")
                 if md_path.exists()
@@ -133,17 +147,40 @@ def run_archive(
                 published=article.published_at,
                 url=url,
                 content_html=pdf_html,
-                output_path=task_dir / "article.pdf",
+                output_path=task_dir / f"{_basename}.pdf",
                 archived_at=archive_time,
             )
         except Exception as e:  # noqa: BLE001
             logger.exception("pdf generation failed")
             raise FetchError(str(e), code="PDF_GENERATION_FAILED") from e
 
-    # 6. 图片 ZIP
-    if OutputType.IMAGES in output_types and image_files:
-        result.images = image_files
-        images_mod.make_images_zip(task_dir, image_files)
+    # 6. 长截图（替代 ZIP）：IMAGES 即截图，不依赖是否有原图
+    if OutputType.IMAGES in output_types:
+        import app.archive.screenshot as screenshot_mod
+
+        # 截图用与 PDF 相同的正文 HTML（已 base64 内联），保证一致性
+        if OutputType.PDF in output_types:
+            screenshot_html = pdf_html  # 同一份已内联的 HTML
+        elif _wechat_md_raw and result.markdown_path:
+            md_path = task_dir / f"{_basename}.md"
+            if not md_path.exists() and (task_dir / "article.md").exists():
+                md_path = task_dir / "article.md"
+            pdf_source_md = md_path.read_text(encoding="utf-8") if md_path.exists() else md_content
+            screenshot_html = markdown_mod.markdown_to_html(pdf_source_md)
+            screenshot_html = _rewrite_image_srcs(screenshot_html, task_dir / "images")
+        else:
+            screenshot_html = _rewrite_image_srcs(cleaned_html, task_dir / "images")
+        result.screenshot_path = screenshot_mod.build_screenshot(
+            title=article.title,
+            author=article.author or article.sitename,
+            source=article.sitename or platform.value,
+            published=article.published_at,
+            url=url,
+            content_html=screenshot_html,
+            output_path=task_dir / f"{_basename}.png",
+            archived_at=archive_time,
+        )
+        result.images = image_files  # 保留计数用于 metadata/展示
 
     # 7. 三行摘要（不调用 LLM）
     result.excerpt = excerpt.extract_excerpt(cleaned_text)
@@ -178,6 +215,8 @@ def _write_metadata(result: ArchiveResult, archive_time: datetime) -> None:
         "image_count": result.image_count,
         "markdown": str(result.markdown_path.name) if result.markdown_path else None,
         "pdf": str(result.pdf_path.name) if result.pdf_path else None,
+        "screenshot": str(result.screenshot_path.name) if result.screenshot_path else None,
+        "cover": str(result.cover_path.name) if result.cover_path else None,
         "video": str(result.video_path.name) if result.video_path else None,
         "archived_at": archive_time.isoformat(),
     }

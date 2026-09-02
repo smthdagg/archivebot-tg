@@ -27,6 +27,7 @@ _FORMAT_LABEL = {
     FileType.PDF: "PDF",
     FileType.MARKDOWN: "MD",
     FileType.IMAGES_ZIP: "Images",
+    FileType.SCREENSHOT: "Screenshot",
 }
 
 
@@ -93,7 +94,7 @@ async def history_detail(callback: types.CallbackQuery) -> None:
 _FILE_TYPE_BY_CB = {
     "pdf": FileType.PDF,
     "md": FileType.MARKDOWN,
-    "img": FileType.IMAGES_ZIP,
+    "img": FileType.SCREENSHOT,
 }
 
 
@@ -118,6 +119,9 @@ async def get_file(callback: types.CallbackQuery) -> None:
             await callback.answer(t(lang, "user.denied"), show_alert=True)
             return
         file_ = next((f for f in task.files if f.type == file_type.value and f.telegram_file_id), None)
+        # 向后兼容：旧任务存的是 IMAGES_ZIP，新请求是 SCREENSHOT
+        if file_ is None and file_type == FileType.SCREENSHOT:
+            file_ = next((f for f in task.files if f.type == FileType.IMAGES_ZIP.value and f.telegram_file_id), None)
         if file_ is None:
             await callback.answer("no file", show_alert=True)
             return

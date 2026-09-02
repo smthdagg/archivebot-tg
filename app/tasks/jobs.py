@@ -232,9 +232,19 @@ async def _upload_all(db, task: Task, result) -> tuple[dict[str, str], list[str]
         await _upload(FileType.PDF, result.pdf_path)
     if result.markdown_path is not None and OutputType.MARKDOWN.value in selected:
         await _upload(FileType.MARKDOWN, result.markdown_path)
-    zip_path = result.task_dir / "images.zip"
-    if result.images and zip_path.exists() and OutputType.IMAGES.value in selected:
-        await _upload(FileType.IMAGES_ZIP, zip_path)
+    # 长截图：不依赖 image_files，纯文字也需截图；扫描 screenshot_path
+    if result.screenshot_path is not None and result.screenshot_path.exists() and OutputType.IMAGES.value in selected:
+        # 超限则转 jpeg 80% 降体积
+        from app.archive.screenshot import maybe_compress_for_telegram as _compress
+
+        screenshot_path = _compress(result.screenshot_path, max_bytes)
+        await _upload(FileType.SCREENSHOT, screenshot_path)
+    elif result.images and OutputType.IMAGES.value in selected:
+        # 向后兼容：历史任务的 images.zip 仍可重发
+        zip_candidates = sorted(result.task_dir.glob("*.zip"))
+        zip_path = zip_candidates[-1] if zip_candidates else None
+        if zip_path is not None and zip_path.exists():
+            await _upload(FileType.IMAGES_ZIP, zip_path)
     db.flush()
     return uploaded, skipped
 
@@ -250,6 +260,10 @@ def _completion_text(task: Task, lang: str) -> str:
         outputs.append(t(lang, "archive.output_pdf"))
     if any(f.type == FileType.MARKDOWN.value for f in task.files):
         outputs.append(t(lang, "archive.output_markdown"))
+    if any(f.type in (FileType.SCREENSHOT.value, FileType.IMAGES_ZIP.value) for f in task.files):
+        is_screenshot = any(f.type == FileType.SCREENSHOT.value for f in task.files)
+        key = "archive.output_screenshot" if is_screenshot else "archive.output_images"
+        outputs.append(t(lang, key))
     return t(
         lang,
         "archive.completed",

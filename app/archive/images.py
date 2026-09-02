@@ -25,6 +25,15 @@ def copy_images(src_dir: Path, task_dir: Path) -> list[Path]:
             if not target.exists():
                 target.write_bytes(p.read_bytes())
             copied.append(target)
+    # 封面/头像：若存在 cover.* / avatar.* 且未被 images/ 覆盖，单独拷贝
+    for name in ("cover.jpg", "cover.png", "cover.webp", "avatar.jpg", "avatar.png"):
+        src_cover = src_dir / name
+        if src_cover.exists():
+            target = dst / src_cover.name
+            if not target.exists():
+                target.write_bytes(src_cover.read_bytes())
+                copied.append(target)
+                logger.info("copied cover %s to %s", name, dst)
     logger.info("copied %d images to %s", len(copied), dst)
     return copied
 
@@ -45,17 +54,18 @@ def build_image_map(html: str, markdown: str, image_files: list[Path]) -> dict[s
     local_srcs = [s for s in local_srcs if s.startswith("images/")]
     if len(local_srcs) != len(remote_urls):
         logger.warning(
-            "image count mismatch html=%d md=%d; keep remote urls",
+            "image count mismatch html=%d md=%d; partial mapping to min(%d)",
             len(local_srcs),
             len(remote_urls),
+            min(len(local_srcs), len(remote_urls)),
         )
-        return {}
     return dict(zip(remote_urls, local_srcs, strict=False))
 
 
-def make_images_zip(task_dir: Path, image_files: list[Path]) -> Path:
-    """把图片打包为 images.zip（用于 IMAGES 输出类型）。"""
-    zip_path = task_dir / "images.zip"
+def make_images_zip(task_dir: Path, image_files: list[Path], basename: str | None = None) -> Path:
+    """把图片打包为 ZIP（用于 IMAGES 输出类型）。basename 为标题_YYYY-MM-DD_HHMM。"""
+    zip_name = f"{basename}.zip" if basename else "images.zip"
+    zip_path = task_dir / zip_name
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for img in sorted(image_files):
             zf.write(img, arcname=img.name)

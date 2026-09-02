@@ -21,6 +21,7 @@ class ArchiveResult:
     pdf_path: Path | None = None
     cover_path: Path | None = None
     images: list[Path] = field(default_factory=list)
+    screenshot_path: Path | None = None  # 长截图（IMAGES 即截图替代 ZIP）
     video_path: Path | None = None  # 视频类平台（Phase 2）：视频文件路径
 
     @property

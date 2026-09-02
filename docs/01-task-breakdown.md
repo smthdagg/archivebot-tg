@@ -29,15 +29,15 @@
 
 > 认领/完成任务后必须更新本表（含 commit 引用）。其他进度描述（如 README）与本表冲突时，以本表为准。
 
-**最后更新：2026-09-02（Cookie Profile · 视频交付 · 全部 Phase 2 起步）**
+**最后更新：2026-09-03（长截图替代图片 ZIP · 产物按标题命名）**
 
 | 里程碑 | 状态 | 说明 | 关键 commit |
 |---|---|---|---|
 | M0 基础设施 | ✅ 完成 | 脚手架、Docker(3.12)、CI(ruff+pytest+alembic)、Alembic 迁移（**修复：CI 原因 `storage/` gitignore 屏蔽 `app/storage` 在 fresh checkout 必挂，本次修复**） | f5104fc → a8d88ef+ |
 | M1 数据层与 i18n | ✅ 完成 | SQLAlchemy 模型/枚举、zh-CN/en-US 全量文案 | f5104fc |
-| M2 归档核心管道 | ✅ 完成并 E2E 验证 | 文本类平台（web/微信/Reddit/X/小红书/微博/知乎）；**视频平台已接入（Phase 2 t_1fb0ee77）：youtube/bilibili/douyin/kuaishou/instagram → fetcher.fetch_video 产出 VideoResult(video_path) → runner.run_video → jobs send_video 交付（复用 50MB 预检），TikTok 尚无 ArchiveBOT service 未适配**；本地+容器内真实抓取 E2E-OK | f5104fc → 9de57a4 · t_1fb0ee77 |
+| M2 归档核心管道 | ✅ 完成并 E2E 验证 | 文本类平台（web/微信/Reddit/X/小红书/微博/知乎）；**视频平台已接入（Phase 2 t_1fb0ee77）：youtube/bilibili/douyin/kuaishou/instagram → fetcher.fetch_video 产出 VideoResult(video_path) → runner.run_video → jobs send_video 交付（复用 50MB 预检），TikTok 尚无 ArchiveBOT service 未适配**；**「图片」输出已改为长截图**（screenshot.py 复用 PDF 模板 full_page PNG，2x 缩放，>40MB 自动转 JPEG；产物命名 标题_YYYY-MM-DD_HHMM.ext，naming.py；Markdown/PDF/截图/ZIP 同名不同扩展；封面回退首图；image_map 数量不匹配时部分映射不再整组丢弃）；本地真实抓取 E2E-OK（132 测试全绿） | f5104fc → 9de57a4 · t_1fb0ee77 |
 | M3 任务系统 | ✅ 完成并容器内验证 | rq 队列、状态机、取消、并发限制；rq 消费全链路打通 | f5104fc → 9de57a4 |
-| M4 Telegram 用户端 | ✅ 完成 | 全部 handler + i18n + 审批流；**真实 token 的交付联调待做** | f5104fc |
+| M4 Telegram 用户端 | ✅ 完成 | 全部 handler + i18n + 审批流；**格式文案与历史取件已切长截图**（format.images/action.get_images → Screenshot，FileType.SCREENSHOT 新枚举，历史任务 IMAGES_ZIP 自动回退兼容）；**真实 token 的交付联调待做** | f5104fc |
 | M5 存储管理 | ✅ 完成 | 800MB/1GB/200MB、file_id 历史（**修复：`app/storage/` 被 `.gitignore storage/` 屏蔽未入库，已改为 `/storage/` 并纳入版本控制**；**软限后台自动清理已接线 cbfe4b2**：任务完成后查 storage.over_soft→清理到 target，保护运行中/当前目录，STORAGE_CLEANUP 审计） | f5104fc → a8d88ef+ · cbfe4b2 |
 | M6 管理后台 | ✅ 完成 | Bot 管理中心 + Web Admin + 审计；**Web Admin CSRF 已补**（itsdangerous double-submit，登录与用户操作 POST 校验，无/错 token → 403，test_admin_csrf.py） | f5104fc → t_e20cd095 |
 | M7 安全加固 | 🔶 大部分完成 | SSRF 三层防线/50MB 预检/RBAC/所有权校验 ✅；**失败自动重试（819796a）、Web Admin 限流+登录锁定（t_fd0a2028）、CSRF（t_e20cd095）均已实现** | 9de57a4 → ea4dc1a |

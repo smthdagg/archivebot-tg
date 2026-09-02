@@ -31,10 +31,10 @@ def rewrite_image_refs(markdown: str, image_map: dict[str, str]) -> str:
         return markdown
 
     def _replace(match: re.Match) -> str:
-        url = match.group(1).strip()
+        url = match.group(2).strip()
         local = image_map.get(url)
         if local:
-            return f"![{match.group(2)}]({local})"
+            return f"![{match.group(1)}]({local})"
         return match.group(0)
 
     return re.sub(r"!\[([^\]]*)\]\(([^)]+)\)", _replace, markdown)
@@ -48,8 +48,9 @@ def markdown_to_html(markdown_text: str) -> str:
     return markdown.markdown(markdown_text, extensions=["extra"])
 
 
-def build_markdown_file(task_dir: Path, content: str) -> Path:
-    """写入 article.md，返回路径。"""
-    path = task_dir / "article.md"
+def build_markdown_file(task_dir: Path, content: str, basename: str | None = None) -> Path:
+    """写入 Markdown 文件，返回路径。basename 为标题_YYYY-MM-DD_HHMM，不传则回退 article。"""
+    name = f"{basename}.md" if basename else "article.md"
+    path = task_dir / name
     path.write_text(content, encoding="utf-8")
     return path

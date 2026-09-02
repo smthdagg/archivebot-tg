@@ -1,9 +1,7 @@
 {
   "start.welcome": "📚 ArchiveBOT\n\nWelcome to the Internet Document Archiver.\n\nSend any article or webpage URL to start.\n\nSupported:\n• WeChat Official Accounts\n• X / Twitter\n• Xiaohongshu\n• Weibo\n• Zhihu\n• Reddit\n• YouTube\n• Generic Web Pages\n• More platforms\n\nAfter sending a URL, choose:\n\n📄 PDF\n📝 Markdown\n🖼 Images\n📦 All\n\nCompleted files will be sent to you automatically.",
-
   "main.menu": "📚 ArchiveBOT\n\n🔗 New Download\n📚 Download History\n🔎 Search History\n📊 My Statistics\n⚙️ Settings\nℹ️ Help",
   "main.menu.admin": "🛠 Admin Center",
-
   "menu.new_download": "🔗 New Download",
   "menu.history": "📚 Download History",
   "menu.search": "🔎 Search History",
@@ -11,23 +9,19 @@
   "menu.settings": "⚙️ Settings",
   "menu.help": "ℹ️ Help",
   "menu.admin": "🛠 Admin Center",
-
   "action.cancel": "❌ Cancel",
   "action.confirm": "Confirm",
   "action.back": "◀️ Back",
-
   "url.parsing": "🔎 Parsing URL...",
   "url.platform": "Platform: {platform}",
   "url.title": "Title: {title}",
   "url.invalid": "❌ Invalid URL\n\nPlease send a valid http/https link.",
   "url.choose_format": "Choose output format:",
   "url.no_url_found": "❌ No link found in the message\n\nPlease send a message containing an http/https link.",
-
   "format.pdf": "📄 PDF",
   "format.markdown": "📝 Markdown",
-  "format.images": "🖼 Images",
+  "format.images": "🖼 Screenshot",
   "format.all": "📦 All",
-
   "task.processing": "⏳ Processing\n\nTask: {task_id}\nPlatform: {platform}\n\nStatus:\n{status}",
   "status.queued": "Queued",
   "status.fetching": "Fetching...",
@@ -36,7 +30,6 @@
   "status.generating_markdown": "Generating Markdown...",
   "status.generating_pdf": "Generating PDF...",
   "status.uploading": "Uploading...",
-
   "archive.completed": "📚 Archive Completed\n\n\"{title}\"\n\nSource: {source}\nAuthor: {author}\nPublished: {published}\n\n{excerpt}\n\n🔗 Original\n{url}\n\n📦 Generated:\n{outputs}",
   "archive.output_summary": "PDF · Markdown · {image_count} Images",
   "archive.output_video": "Video",
@@ -44,7 +37,6 @@
   "archive.output_markdown": "Markdown",
   "archive.output_images": "{image_count} Images",
   "archive.oversized_skipped": "⚠️ Skipped — the following exceed Telegram's 50MB limit:\n{files}",
-
   "archive.failed": "❌ Archive Failed\n\nReason:\n{reason}\n\nPlatform:\n{platform}\n\nURL:\n{url}",
   "error.login_required": "Login required.",
   "error.invalid_url": "Invalid URL",
@@ -57,34 +49,27 @@
   "error.telegram_upload_failed": "Telegram upload failed",
   "error.storage_full": "Storage space is insufficient",
   "error.unknown": "Unknown error",
-
   "action.retry": "🔄 Retry",
   "action.open_original": "🌐 Open Original",
-
   "user.pending": "📚 ArchiveBOT\n\nYour account has not been approved yet.\n\nStatus: ⏳ Pending approval\n\nApplication ID: {application_id}\n\nPlease wait for administrator approval.",
   "user.disabled": "📚 ArchiveBOT\n\nYour account has been disabled.\n\nPlease contact the administrator for help.",
   "user.denied": "⛔ Access denied.",
-
   "history.title": "📚 Download History\n\nTotal: {total}",
   "history.item": "{index}. {title}\n   {date} · {outputs}",
   "history.empty": "📭 No download history yet",
   "history.pagination": "◀️ {page} / {pages} ▶️",
-
   "history.detail": "📚 Download Record\n\n\"{title}\"\n\nSource: {source}\nAuthor: {author}\n\nArchived at:\n{archived_at}\n\nOriginal URL:\n{url}\n\nFormats:\n{formats}\n\nSize:\n{size}",
-
   "action.get_pdf": "📄 Get PDF",
   "action.get_markdown": "📝 Get Markdown",
-  "action.get_images": "🖼 Get Images",
+  "action.get_images": "🖼 Get Screenshot",
   "action.get_all": "📦 Get All",
   "action.rearchive": "🔄 Re-archive",
   "action.delete": "🗑 Delete",
   "action.prev": "◀️",
   "action.next": "▶️",
-
   "search.prompt": "Enter title, keyword, or platform:",
   "search.results": "🔍 Search Results",
   "search.empty": "🔍 No matching records found",
-
   "settings.title": "⚙️ Settings",
   "settings.default_format": "Default formats:",
   "settings.summary": "Summary:",
@@ -98,7 +83,6 @@
   "settings.language.zh": "🇨🇳 中文",
   "settings.language.en": "🇺🇸 English",
   "settings.language.auto": "🌐 Auto",
-
   "admin.center": "🛠 Admin Center",
   "admin.users": "👥 Users",
   "admin.pending": "📥 Pending",
@@ -107,9 +91,7 @@
   "admin.status": "📊 System Status",
   "admin.logs": "📜 Logs",
   "admin.settings": "⚙️ Settings",
-
   "help.text": "ℹ️ Help\n\nSend an article or webpage URL to archive it.\nSupports WeChat Official Accounts, X, Xiaohongshu, Weibo, Zhihu, Reddit, YouTube, and generic web pages.",
-
   "platform.wechat": "WeChat Official Account",
   "platform.twitter": "X / Twitter",
   "platform.xhs": "Xiaohongshu",
@@ -125,5 +107,6 @@
   "platform.pinterest": "Pinterest",
   "platform.feishu": "Feishu",
   "platform.web": "Generic Web Page",
-  "platform.unknown": "Unknown"
+  "platform.unknown": "Unknown",
+  "archive.output_screenshot": "Screenshot"
 }
