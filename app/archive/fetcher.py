@@ -242,6 +242,10 @@ def fetch_article(
             from app.archive.wechat_patch import _patch_wechat_fetch_page_html
 
             _patch_wechat_fetch_page_html(None)
+        if platform == Platform.WEB and special_site == "caixin":
+            from app.archive.webpage_patch import _patch_webpage_cookies
+
+            _patch_webpage_cookies(None)
         module = __import__(module_name, fromlist=[class_name])
         cls = getattr(module, class_name)
         with inject_cookies(cls, platform, cookies):

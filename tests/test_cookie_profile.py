@@ -67,7 +67,8 @@ def test_cookie_profiles_invalid_structure_rejected(monkeypatch):
 
 
 def test_cookie_profiles_empty_default():
-    s = Settings()
+    # data/cookie_profiles.json 存在时会合并进 Settings（避免宿主机文件污染测试）
+    s = Settings(_env_file=None, cookie_profiles_file="")
     assert s.cookie_profiles == {}
 
 
