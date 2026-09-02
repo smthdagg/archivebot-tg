@@ -141,6 +141,7 @@ def _process(db, task_id: int) -> dict:
         # 绝不能把任务翻转为 FAILED（否则触发重试 → 用户收到重复文件）
         try:
             delivery.run_async(delivery.send_message(task.chat_id, _completion_text(task, lang)))
+            _finalize_status_message(task, lang, "task.done")
             if skipped:
                 names = "\n".join(f"• {name}" for name in skipped)
                 delivery.run_async(delivery.send_message(
@@ -162,6 +163,7 @@ def _process(db, task_id: int) -> dict:
               target_type="task", target_id=task.id)
         db.commit()
         delivery.run_async(delivery.edit_message(task.chat_id, task.status_message_id or 0, t(lang, "action.cancel")))
+        _finalize_status_message(task, lang, "action.cancel", edit_text=False)
         return {"status": TaskStatus.CANCELLED}
     except Exception as e:  # noqa: BLE001
         logger.exception("task %s failed", task_id)
@@ -195,6 +197,15 @@ def _update_status_message(db, task: Task, lang: str) -> None:
     key = _STATUS_I18N.get(TaskStatus(task.status), "status.queued")
     text = t(lang, "task.processing", task_id=task.id, platform=task.platform or "-", status=t(lang, key))
     delivery.run_async(delivery.edit_message(task.chat_id, task.status_message_id, text))
+
+
+def _finalize_status_message(task: Task, lang: str, done_key: str, *, edit_text: bool = True) -> None:
+    """终态收尾：状态消息改为终态文案并移除取消按钮（任务已不可取消）。"""
+    if not task.status_message_id:
+        return
+    if edit_text:
+        delivery.run_async(delivery.edit_message(task.chat_id, task.status_message_id, t(lang, done_key)))
+    delivery.run_async(delivery.edit_reply_markup(task.chat_id, task.status_message_id))
 
 
 def _md_for_delivery(result) -> Path:
@@ -335,6 +346,7 @@ def _fail(db, task: Task, code: str, message: str, lang: str) -> None:
     audit(db, action=AuditAction.TASK_FAILED, operator_user_id=task.user_id,
           target_type="task", target_id=task.id, details={"code": code})
     db.commit()
+    _finalize_status_message(task, lang, "task.failed")
     try:
         reason = _error_text(code, lang)
         delivery.run_async(delivery.send_message(

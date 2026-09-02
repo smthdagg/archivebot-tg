@@ -23,6 +23,8 @@
   "format.images": "🖼 长截图",
   "format.all": "📦 全部",
   "task.processing": "⏳ 正在处理\n\n任务 / Task: {task_id}\n平台 / Platform: {platform}\n\n状态 / Status:\n{status}",
+  "task.done": "✅ 任务完成 / Task completed",
+  "task.failed": "❌ 任务失败 / Task failed",
   "status.queued": "排队中 / Queued",
   "status.fetching": "获取页面... / Fetching...",
   "status.parsing": "解析内容... / Parsing...",

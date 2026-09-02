@@ -69,6 +69,12 @@ async def on_url_message(message: types.Message, state: FSMContext) -> None:
 
 @router.callback_query(ArchiveState.awaiting_format, F.data.startswith("fmt:"))
 async def on_format_selected(callback: types.CallbackQuery, state: FSMContext) -> None:
+    # 选择后立即收起格式菜单：作为点击反馈，也防止重复点击/误触
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:  # noqa: BLE001 - 消息可能过旧/已被编辑，尽力而为
+        pass
+
     data = await state.get_data()
     url: str | None = data.get("pending_url")
     platform: str | None = data.get("pending_platform")
@@ -136,6 +142,19 @@ async def on_format_selected(callback: types.CallbackQuery, state: FSMContext) -
         await callback.answer()
     finally:
         db.close()
+
+
+@router.callback_query(F.data.startswith("fmt:"))
+async def on_format_stale(callback: types.CallbackQuery) -> None:
+    """状态已失效（会话清空/重启后）的格式按钮兜底：收起菜单，消除加载动画。
+
+    注意注册顺序：必须在 on_format_selected 之后，仅接管状态已不匹配的回调。
+    """
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:  # noqa: BLE001
+        pass
+    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("cancel:"))

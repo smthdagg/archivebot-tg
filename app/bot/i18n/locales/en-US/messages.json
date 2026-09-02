@@ -23,6 +23,8 @@
   "format.images": "🖼 Screenshot",
   "format.all": "📦 All",
   "task.processing": "⏳ Processing\n\nTask: {task_id}\nPlatform: {platform}\n\nStatus:\n{status}",
+  "task.done": "✅ Task completed",
+  "task.failed": "❌ Task failed",
   "status.queued": "Queued",
   "status.fetching": "Fetching...",
   "status.parsing": "Parsing...",

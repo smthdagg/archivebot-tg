@@ -46,6 +46,7 @@ class _FakeMessage:
         self.message_id = message_id
         self.answers = []
         self.edits = []
+        self.markup_edits = []
 
     async def answer(self, text, reply_markup=None, parse_mode=None):
         self.answers.append({"text": text, "reply_markup": reply_markup, "parse_mode": parse_mode})
@@ -53,6 +54,9 @@ class _FakeMessage:
 
     async def edit_text(self, text, reply_markup=None):
         self.edits.append({"text": text, "reply_markup": reply_markup})
+
+    async def edit_reply_markup(self, reply_markup=None):
+        self.markup_edits.append(reply_markup)
 
 
 class _FakeBot:
@@ -308,6 +312,7 @@ def test_archive_format_selected_creates_task_and_enqueues(db, db_factory, patch
     _run(archive_mod.on_format_selected(cb, fsm))
 
     assert fsm.data == {}  # 状态已清
+    assert msg.markup_edits == [None]  # 格式菜单已收起
     tasks, _ = task_manager.list_user_tasks(db, user.id)
     assert len(tasks) == 1
     assert tasks[0].status == TaskStatus.QUEUED

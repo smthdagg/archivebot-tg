@@ -102,3 +102,14 @@ async def edit_message(chat_id: int, message_id: int, text: str, reply_markup=No
         )
     except Exception as e:  # noqa: BLE001 - 消息可能已被编辑/删除，尽力而为
         logger.debug("edit_message failed: %s", e)
+
+
+async def edit_reply_markup(chat_id: int, message_id: int, reply_markup=None) -> None:
+    """显式移除/替换消息的 inline keyboard（edit_message 传 None 是「保持不变」）。"""
+    bot = get_bot()
+    try:
+        await bot.edit_message_reply_markup(
+            chat_id=chat_id, message_id=message_id, reply_markup=reply_markup
+        )
+    except Exception as e:  # noqa: BLE001 - 消息可能已被编辑/删除，尽力而为
+        logger.debug("edit_reply_markup failed: %s", e)
