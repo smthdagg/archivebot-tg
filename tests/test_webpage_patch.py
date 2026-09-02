@@ -101,3 +101,37 @@ class TestRewriteContentFiles:
         post_dir.mkdir()
         _rewrite_content_files(post_dir)
         assert not (post_dir / "content.txt").exists()
+
+
+class TestWechatImageUrlMap:
+    """runner._wechat_image_url_map：data-src 顺序 ↔ md 本地引用顺序对齐。"""
+
+    def _make(self):
+        from app.archive.runner import _wechat_image_url_map
+
+        return _wechat_image_url_map
+
+    def test_aligns_by_order(self):
+        fn = self._make()
+        html = (
+            '<div id="js_content">'
+            '<img data-src="https://mmbay.qpic.cn/a.jpg">'
+            '<img data-src="https://mmbay.qpic.cn/b.png">'
+            '<img data-src="https://mmbay.qpic.cn/a.jpg">'  # 重复 URL，服务端会去重
+            "</div>"
+        )
+        md = "![图片](images/01.jpg)\n正文\n![图片](images/02.png)\n![图片](images/01.jpg)\n"
+        assert fn(html, md) == {
+            "01.jpg": "https://mmbay.qpic.cn/a.jpg",
+            "02.png": "https://mmbay.qpic.cn/b.png",
+        }
+
+    def test_count_mismatch_returns_empty(self):
+        fn = self._make()
+        html = '<div id="js_content"><img data-src="https://mmbay.qpic.cn/a.jpg"></div>'
+        md = "![a](images/01.jpg)\n![b](images/02.jpg)\n"
+        assert fn(html, md) == {}
+
+    def test_empty_page_html_returns_empty(self):
+        fn = self._make()
+        assert fn("", "![a](images/01.jpg)") == {}

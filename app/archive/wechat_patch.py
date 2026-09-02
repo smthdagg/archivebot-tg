@@ -94,6 +94,12 @@ def _patch_wechat_fetch_page_html(cls=None) -> None:
                     break
 
             content = page.content()
+            # 暂存原始页面 HTML：runner 据此建立 本地图片名→远程URL 映射
+            # （vendor 下载图片后 md 里只剩 images/xx 本地引用，原 URL 不落盘）
+            try:
+                self._last_page_html = content
+            except Exception:  # noqa: BLE001 - 暂存失败不影响抓取
+                pass
             browser.close()
             return content
 

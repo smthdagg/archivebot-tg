@@ -58,6 +58,8 @@ class FetchedArticle:
     images: list[Path] = field(default_factory=list)
     cover: Path | None = None
     save_path: Path | None = None  # ArchiveBOT 落盘目录（内含 images/）
+    # 微信：原始页面 HTML（wechat_patch 暂存），用于建立 本地图片名→远程URL 映射
+    page_html: str = ""
 
 
 def _read_json(path: Path) -> dict:
@@ -237,6 +239,7 @@ def fetch_article(
             raise FetchError(str(e), code=ErrorCode.UNKNOWN) from e
 
     module_name, class_name, method_name = entry
+    page_html = ""
     try:
         if platform == Platform.WECHAT:
             from app.archive.wechat_patch import _patch_wechat_fetch_page_html
@@ -251,6 +254,8 @@ def fetch_article(
         with inject_cookies(cls, platform, cookies):
             service = cls(base_path=str(task_dir), create_date_folders=False)
             result = getattr(service, method_name)(url)
+            if platform == Platform.WECHAT:
+                page_html = getattr(service, "_last_page_html", "")
     except ImportError as e:
         logger.error("ArchiveBOT dependency missing for %s: %s", platform, e)
         raise FetchError("ArchiveBOT backend unavailable", code=ErrorCode.UNKNOWN) from e
@@ -265,7 +270,9 @@ def fetch_article(
     save_path = (result or {}).get("save_path")
     if not save_path:
         raise FetchError("ArchiveBOT returned no save_path", code=ErrorCode.EMPTY_CONTENT)
-    return _from_save_result(save_path, url, platform.value)
+    article = _from_save_result(save_path, url, platform.value)
+    article.page_html = page_html
+    return article
 
 
 # ---------------------------------------------------------------------------

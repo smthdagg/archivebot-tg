@@ -5,6 +5,7 @@
 
 import json
 import logging
+import re
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -104,23 +105,9 @@ def run_archive(
         if on_status:
             on_status(TaskStatus.GENERATING_MARKDOWN)
         if _wechat_md_raw:
-            md_content = _wechat_md_raw
-            # 微信的 content.md 已含 images/xx.jpg 本地路径，再以 image_files 校验
-            # 去除孤儿远程图（count mismatch 时 build_image_map 会回退远程 URL，这里直接收敛）
-            valid = {f"images/{p.name}" for p in image_files}
-            # 仅保留命中本地文件的 ![...](images/...)，远程残留不动（保证可读）
-            md_content = "\n".join(
-                line if "images/" not in line or any(v in line for v in valid) else line
-                for line in md_content.splitlines()
-            )
-            # 交付 MD 需要本地名→远程 URL 映射（从微信 html 的远程图按顺序对应）
-            result.image_urls = {
-                Path(local).name: remote
-                for remote, local in images_mod.build_image_map(
-                    article.html, md_content, image_files
-                ).items()
-                if remote.startswith(("http://", "https://"))
-            }
+            md_content = _wechat_filtered_md(_wechat_md_raw, image_files)
+            # 交付 MD 需要本地名→远程 URL 映射（页面 data-src 顺序 ↔ md 本地引用顺序）
+            result.image_urls = _wechat_image_url_map(article.page_html, md_content)
         else:
             md_content = article.markdown or markdown_mod.html_to_markdown(cleaned_html)
             image_map = images_mod.build_image_map(article.html, md_content, image_files)
@@ -171,12 +158,11 @@ def run_archive(
         # 截图用与 PDF 相同的正文 HTML（已 base64 内联），保证一致性
         if OutputType.PDF in output_types:
             screenshot_html = pdf_html  # 同一份已内联的 HTML
-        elif _wechat_md_raw and result.markdown_path:
-            md_path = task_dir / f"{_basename}.md"
-            if not md_path.exists() and (task_dir / "article.md").exists():
-                md_path = task_dir / "article.md"
-            pdf_source_md = md_path.read_text(encoding="utf-8") if md_path.exists() else md_content
-            screenshot_html = markdown_mod.markdown_to_html(pdf_source_md)
+        elif _wechat_md_raw:
+            # 微信 article.html 为空（service 不产 content.html），用 cleaned_html
+            # 渲染会得到空白页；正文以 content.md 为准，即使未选 Markdown 也一样
+            wechat_md = _wechat_filtered_md(_wechat_md_raw, image_files)
+            screenshot_html = markdown_mod.markdown_to_html(wechat_md)
             screenshot_html = _rewrite_image_srcs(screenshot_html, task_dir / "images")
         else:
             screenshot_html = _rewrite_image_srcs(cleaned_html, task_dir / "images")
@@ -205,6 +191,51 @@ def _collect_images(task_dir: Path) -> list[Path]:
     if not img_dir.exists():
         return []
     return sorted(p for p in img_dir.iterdir() if p.is_file())
+
+
+def _wechat_filtered_md(md_raw: str, image_files: list[Path]) -> str:
+    """微信 content.md 行过滤：仅保留命中本地文件的 images/ 引用行。"""
+    valid = {f"images/{p.name}" for p in image_files}
+    return "\n".join(
+        line if "images/" not in line or any(v in line for v in valid) else line
+        for line in md_raw.splitlines()
+    )
+
+
+def _wechat_image_url_map(page_html: str, md_content: str) -> dict[str, str]:
+    """微信 本地图片名 → 远程 URL。
+
+    vendor 下载后 md 只剩 images/xx 本地引用，原始 URL 不落盘；但下载顺序
+    与 #js_content 内 img 的 data-src/src 顺序一致（同一次 DOM 遍历产出），
+    两侧各自去重后按顺序对齐。数量对不上（相册页等特殊版式）则放弃映射，
+    交付 MD 保留本地引用。
+    """
+    if not page_html:
+        return {}
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(page_html, "html.parser")
+    content_el = soup.select_one("#js_content") or soup
+    remote: list[str] = []
+    seen: set[str] = set()
+    for img in content_el.select("img"):
+        src = (img.get("data-src") or img.get("src") or "").strip()
+        if src.startswith(("http://", "https://")) and src not in seen:
+            seen.add(src)
+            remote.append(src)
+    local: list[str] = []
+    seen_local: set[str] = set()
+    for m in re.finditer(r"!\[[^\]]*\]\(((?:\./)?images/[^)]+)\)", md_content):
+        name = Path(m.group(1)).name
+        if name not in seen_local:
+            seen_local.add(name)
+            local.append(name)
+    if not remote or len(remote) != len(local):
+        logger.info(
+            "wechat image url map skipped (remote=%d local=%d)", len(remote), len(local)
+        )
+        return {}
+    return dict(zip(local, remote, strict=True))
 
 
 def _extract_original_image_urls(html: str) -> dict[str, str]:
