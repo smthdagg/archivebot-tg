@@ -26,7 +26,9 @@ class TestMergeMedia:
         media = [{"src": "https://img.caixin.com/x/1.jpg", "caption": "金库图注", "anchor": "文｜财新周刊 王石玉 岳跃"}]
         out = _merge_media(content, media)
         assert out.startswith("<figure>")
-        assert '<img src="https://img.caixin.com/x/1.jpg"/>' in out
+        assert 'src="https://img.caixin.com/x/1.jpg"' in out
+        # 原始远程 URL 保留在 data-original-src（vendor 下载后 src 会改写为本地路径）
+        assert 'data-original-src="https://img.caixin.com/x/1.jpg"' in out
         assert "<figcaption>金库图注</figcaption>" in out
         # 图片插在锚点段落之前
         assert out.index("</figure>") < out.index("文｜财新周刊")

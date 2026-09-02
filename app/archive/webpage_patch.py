@@ -118,6 +118,9 @@ def _merge_media(content_html: str, media: list[dict]) -> str:
         fig = soup.new_tag("figure")
         img = soup.new_tag("img")
         img["src"] = src
+        # vendor 下载图片后会把 src 改写为本地路径，原始远程 URL 留在
+        # data-original-src 供交付 MD 时把本地引用改回远程
+        img["data-original-src"] = src
         fig.append(img)
         caption = (m.get("caption") or "").strip()
         if caption:

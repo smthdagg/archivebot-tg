@@ -5,7 +5,9 @@ process_task 是 rq 入口（同步函数）；内部按状态机推进，并调
 """
 
 import logging
+import re
 from datetime import datetime, timezone
+from pathlib import Path
 
 from app.archive.runner import run_archive, run_video
 from app.bot import delivery
@@ -195,6 +197,34 @@ def _update_status_message(db, task: Task, lang: str) -> None:
     delivery.run_async(delivery.edit_message(task.chat_id, task.status_message_id, text))
 
 
+def _md_for_delivery(result) -> Path:
+    """交付版 MD：把 `![](images/xx.jpg)` 本地引用改回远程 URL。
+
+    收件方拿到的单个 .md 文件旁没有 images/ 目录，本地引用必然裂图；
+    图片源 URL（如财新 img.caixin.com）公开可访问，改回远程才能正常显示。
+    映射缺失的引用保持原样。
+    """
+    md = result.markdown_path
+    mapping = getattr(result, "image_urls", None) or {}
+    if not mapping:
+        return md
+    try:
+        text = md.read_text(encoding="utf-8")
+    except OSError:
+        return md
+    if "](images/" not in text and "](./images/" not in text:
+        return md
+
+    def _sub(m: re.Match) -> str:
+        remote = mapping.get(Path(m.group(2)).name)
+        return f"![{m.group(1)}]({remote})" if remote else m.group(0)
+
+    new_text = re.sub(r"!\[([^\]]*)\]\(((?:\./)?images/[^)]+)\)", _sub, text)
+    if new_text != text:
+        md.write_text(new_text, encoding="utf-8")
+    return md
+
+
 async def _upload_all(db, task: Task, result) -> tuple[dict[str, str], list[str]]:
     """上传各产出文件，落库 files 表。
 
@@ -231,7 +261,7 @@ async def _upload_all(db, task: Task, result) -> tuple[dict[str, str], list[str]
     if result.pdf_path is not None:
         await _upload(FileType.PDF, result.pdf_path)
     if result.markdown_path is not None and OutputType.MARKDOWN.value in selected:
-        await _upload(FileType.MARKDOWN, result.markdown_path)
+        await _upload(FileType.MARKDOWN, _md_for_delivery(result))
     # 长截图：不依赖 image_files，纯文字也需截图；扫描 screenshot_path
     if result.screenshot_path is not None and result.screenshot_path.exists() and OutputType.IMAGES.value in selected:
         # 超限则转 jpeg 80% 降体积

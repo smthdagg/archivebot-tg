@@ -113,10 +113,20 @@ def run_archive(
                 line if "images/" not in line or any(v in line for v in valid) else line
                 for line in md_content.splitlines()
             )
+            # 交付 MD 需要本地名→远程 URL 映射（从微信 html 的远程图按顺序对应）
+            result.image_urls = {
+                Path(local).name: remote
+                for remote, local in images_mod.build_image_map(
+                    article.html, md_content, image_files
+                ).items()
+                if remote.startswith(("http://", "https://"))
+            }
         else:
             md_content = article.markdown or markdown_mod.html_to_markdown(cleaned_html)
             image_map = images_mod.build_image_map(article.html, md_content, image_files)
             md_content = markdown_mod.rewrite_image_refs(md_content, image_map)
+            # vendor 下载图片后 content.html 里只剩本地路径，原始 URL 在 data-original-src
+            result.image_urls = _extract_original_image_urls(article.html)
         result.markdown_path = markdown_mod.build_markdown_file(task_dir, md_content, basename=_basename)
 
     # 5. PDF
@@ -197,6 +207,20 @@ def _collect_images(task_dir: Path) -> list[Path]:
     return sorted(p for p in img_dir.iterdir() if p.is_file())
 
 
+def _extract_original_image_urls(html: str) -> dict[str, str]:
+    """提取 本地图片名 → 原始远程 URL（webpage_patch 合并媒体时留下的
+    data-original-src；vendor 下载图片后 src 已改写为本地路径）。"""
+    from bs4 import BeautifulSoup
+
+    out: dict[str, str] = {}
+    for img in BeautifulSoup(html, "html.parser").find_all("img"):
+        orig = (img.get("data-original-src") or "").strip()
+        src = (img.get("src") or "").strip()
+        if orig and src.startswith("images/"):
+            out[Path(src).name] = orig
+    return out
+
+
 def _html_to_text(html: str) -> str:
     from bs4 import BeautifulSoup
 
@@ -213,6 +237,7 @@ def _write_metadata(result: ArchiveResult, archive_time: datetime) -> None:
         "source_url": result.source_url,
         "excerpt": result.excerpt,
         "image_count": result.image_count,
+        "image_urls": result.image_urls or None,
         "markdown": str(result.markdown_path.name) if result.markdown_path else None,
         "pdf": str(result.pdf_path.name) if result.pdf_path else None,
         "screenshot": str(result.screenshot_path.name) if result.screenshot_path else None,

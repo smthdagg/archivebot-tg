@@ -23,6 +23,8 @@ class ArchiveResult:
     images: list[Path] = field(default_factory=list)
     screenshot_path: Path | None = None  # 长截图（IMAGES 即截图替代 ZIP）
     video_path: Path | None = None  # 视频类平台（Phase 2）：视频文件路径
+    # 本地图片名 → 远程 URL（交付 MD 时把 images/xx.jpg 引用改回远程，收件方无本地目录）
+    image_urls: dict[str, str] = field(default_factory=dict)
 
     @property
     def image_count(self) -> int:
