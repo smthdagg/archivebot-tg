@@ -40,6 +40,14 @@ def rewrite_image_refs(markdown: str, image_map: dict[str, str]) -> str:
     return re.sub(r"!\[([^\]]*)\]\(([^)]+)\)", _replace, markdown)
 
 
+def markdown_to_html(markdown_text: str) -> str:
+    """Markdown → HTML（供微信分支的 PDF 渲染使用，保留图片语义）。"""
+    import markdown
+
+    # extra 支持表格/代码围栏，图片与段落在 PDF 的 Chromium 渲染中按块级布局
+    return markdown.markdown(markdown_text, extensions=["extra"])
+
+
 def build_markdown_file(task_dir: Path, content: str) -> Path:
     """写入 article.md，返回路径。"""
     path = task_dir / "article.md"

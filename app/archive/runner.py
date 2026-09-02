@@ -55,8 +55,17 @@ def run_archive(
     # 2. 清洗
     if on_status:
         on_status(TaskStatus.PARSING)
-    cleaned_html = cleaner.clean_html(article.html)
-    cleaned_text = cleaner.clean_text(article.text or _html_to_text(cleaned_html))
+    if platform == Platform.WECHAT:
+        # 微信公众号内容来自 wechat_to_md（parser 已按 #js_content + code/media/噪声过滤），
+        # 产物 content.md 已是本地化的 Markdown 主路径，HTML 仅作 PDF 的渲染源。
+        # 通用 cleaner 的 blocklist（含 share-/comment/related-/recommend 等）
+        # 会误杀公众号正文容器（rich_media_content/share_notice 等），因此
+        # 微信分支仅做脚本/样式去除与空块过滤，不走 blocklist。
+        cleaned_html = cleaner.clean_html_for_wechat(article.html)
+        cleaned_text = cleaner.clean_text(article.text or _html_to_text(cleaned_html))
+    else:
+        cleaned_html = cleaner.clean_html(article.html)
+        cleaned_text = cleaner.clean_text(article.text or _html_to_text(cleaned_html))
 
     # 3. 图片本地化（从 ArchiveBOT 产物目录拷贝到 task_dir/images）
     if on_status:
@@ -76,22 +85,47 @@ def run_archive(
         source_url=url,
     )
 
+    # 3b. 微信 Markdown 主路径：wechat_to_md 产物的 content.md 已含本地化图片
+    # （images/xx.jpg），无需再以 cleaned_html 重新生成，避免空 HTML 导致幻觉。
+    _wechat_md_raw = article.markdown if platform == Platform.WECHAT and article.markdown else ""
+
     # 4. Markdown
     if OutputType.MARKDOWN in output_types or OutputType.PDF in output_types:
         if on_status:
             on_status(TaskStatus.GENERATING_MARKDOWN)
-        md_content = article.markdown or markdown_mod.html_to_markdown(cleaned_html)
-        image_map = images_mod.build_image_map(article.html, md_content, image_files)
-        md_content = markdown_mod.rewrite_image_refs(md_content, image_map)
+        if _wechat_md_raw:
+            md_content = _wechat_md_raw
+            # 微信的 content.md 已含 images/xx.jpg 本地路径，再以 image_files 校验
+            # 去除孤儿远程图（count mismatch 时 build_image_map 会回退远程 URL，这里直接收敛）
+            valid = {f"images/{p.name}" for p in image_files}
+            # 仅保留命中本地文件的 ![...](images/...)，远程残留不动（保证可读）
+            md_content = "\n".join(
+                line if "images/" not in line or any(v in line for v in valid) else line
+                for line in md_content.splitlines()
+            )
+        else:
+            md_content = article.markdown or markdown_mod.html_to_markdown(cleaned_html)
+            image_map = images_mod.build_image_map(article.html, md_content, image_files)
+            md_content = markdown_mod.rewrite_image_refs(md_content, image_map)
         result.markdown_path = markdown_mod.build_markdown_file(task_dir, md_content)
 
     # 5. PDF
     if OutputType.PDF in output_types:
         if on_status:
             on_status(TaskStatus.GENERATING_PDF)
-        # 把 content_html 中的 img src 从相对路径（images/xxx）改写为
-        # file:// 绝对路径，Playwright 才能渲染（规格 §11 图片内联）
-        pdf_html = _rewrite_image_srcs(cleaned_html, task_dir / "images")
+        # 把内容转为 PDF 的 HTML：微信分支由 markdown 先经 markdown 渲染为 HTML，
+        # 再把 img src 改写为 file:// 绝对路径（Playwright 渲染需要，规格 §11）
+        if _wechat_md_raw and result.markdown_path:
+            md_path = task_dir / "article.md"
+            pdf_source_md = (
+                md_path.read_text(encoding="utf-8")
+                if md_path.exists()
+                else md_content
+            )
+            pdf_html = markdown_mod.markdown_to_html(pdf_source_md)
+            pdf_html = _rewrite_image_srcs(pdf_html, task_dir / "images")
+        else:
+            pdf_html = _rewrite_image_srcs(cleaned_html, task_dir / "images")
         try:
             result.pdf_path = pdf_mod.build_pdf(
                 title=article.title,
