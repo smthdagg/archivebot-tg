@@ -40,6 +40,10 @@ _REQUIRED_COOKIE_KEYS = ("name", "value", "domain", "path")
 FILE_BASED_PLATFORMS: frozenset[str] = frozenset(
     {Platform.WECHAT.value, Platform.XHS.value, Platform.REDDIT.value}
 )
+# 特殊网站：财新等 WEB 平台下的白名单域名，允许用 Playwright/cookie 注入抓取
+SPECIAL_WEB_COOKIE_SITES: dict[str, list[str]] = {
+    "caixin": [".caixin.com", "weekly.caixin.com"],
+}
 METHOD_BASED_PLATFORMS: frozenset[str] = frozenset({Platform.ZHIHU.value})
 
 # 明确不支持 cookie 注入的平台（记录在案，见 docs/05）
@@ -127,11 +131,14 @@ def inject_cookies(
     service_cls: type,
     platform: Platform,
     cookies: list[dict[str, Any]] | None,
+    *,
+    special_site: str | None = None,
 ) -> Any:
     """在调用 ArchiveBOT 服务期间注入 profile cookie，结束后恢复原状。
 
     - 文件型平台：把 cookie 写入临时文件并临时接管 `cls._COOKIES_PATH`。
     - 方法型平台：临时替换 `_get_cookies` 类方法。
+    - 特殊网站（如 caixin 的 WEB）：即使 platform=WEB 也允许按 url 域名匹配注入。
     - cookies 为空或平台不支持：直接放行（no-op）。
     """
     if not cookies:
@@ -139,6 +146,13 @@ def inject_cookies(
         return
 
     platform_value = platform.value
+    # 特殊网站的 WEB 注入：财新等白名单域，客户端已验证可阅读即允许注入
+    if special_site is not None and platform_value == Platform.WEB.value:
+        with _file_based_injection(service_cls, cookies) as applied:
+            # 让 webpage_service 也能通过 _COOKIES_PATH 消费（Playwright 读取）
+            # 实际抓取走 trafilatura+Playwright，cookie 由 page.context.add_cookies 注入
+            yield applied
+        return
     if platform_value in FILE_BASED_PLATFORMS:
         with _file_based_injection(service_cls, cookies) as applied:
             yield applied

@@ -8,7 +8,7 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from app.bot.handlers import admin, archive, history, menu, start
+from app.bot.handlers import admin, archive, cookies, history, menu, start
 from app.config import get_settings
 from app.database.database import init_db
 
@@ -33,6 +33,7 @@ async def main() -> None:
         history.router,
         menu.router,
         admin.router,
+        cookies.router,
     )
 
     bot = Bot(token=settings.telegram_bot_token)

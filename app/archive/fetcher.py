@@ -182,13 +182,40 @@ def fetch_article(
     ssrf_guard.ensure_installed()
 
     # Cookie Profile 注入（Phase 2）：解析 → 归一 → 调用期间注入
+    # 特殊网站（如 caixin 的 WEB）按 url 域名匹配注入，即使 platform=WEB
+    special_site: str | None = None
+    if platform == Platform.WEB:
+        from app.archive.cookie_registry import SPECIAL_SITES as _SPECIAL
+
+        for key, cfg in _SPECIAL.items():
+            if cfg.get("platform") == Platform.WEB.value:
+                for dom in cfg.get("domains", []):
+                    if dom.lstrip(".") in url:
+                        special_site = key
+                        break
+            if special_site:
+                break
     profiles = load_profiles()
-    try:
-        cookies = resolve_cookies(profiles, cookie_profile, platform)
-    except CookieProfileError as e:
-        logger.error("cookie profile error for platform %s: %s", platform.value, e)
-        raise FetchError(str(e), code=ErrorCode.UNKNOWN) from e
-    if cookie_profile:
+    # 特殊网站的 WEB：允许按 site_key（如 caixin）取 cookie，即使 platform=WEB
+    # 不在 FILE_BASED。对普通 WEB 仍走原逻辑（忽略）。
+    cookies = None
+    if special_site is not None and cookie_profile:
+        from app.archive.cookie_profile import _sanitize_cookies as _sc
+
+        prof_cookies = profiles.get(cookie_profile, {}).get(special_site)
+        if prof_cookies:
+            cookies = _sc(Platform.WEB, prof_cookies)
+        if cookies is None:
+            logger.info(
+                "cookie profile %r has no cookies for special site %r (url %r)",
+                cookie_profile, special_site, url[:60],
+            )
+    elif cookie_profile:
+        try:
+            cookies = resolve_cookies(profiles, cookie_profile, platform)
+        except CookieProfileError as e:
+            logger.error("cookie profile error for platform %s: %s", platform.value, e)
+            raise FetchError(str(e), code=ErrorCode.UNKNOWN) from e
         if cookies is None:
             if platform.value in EXTERNAL_COOKIE_PLATFORMS:
                 logger.warning(
@@ -202,6 +229,12 @@ def fetch_article(
                     cookie_profile,
                     platform.value,
                 )
+    elif cookie_profile:
+        try:
+            cookies = resolve_cookies(profiles, cookie_profile, platform)
+        except CookieProfileError as e:
+            logger.error("cookie profile error for platform %s: %s", platform.value, e)
+            raise FetchError(str(e), code=ErrorCode.UNKNOWN) from e
 
     module_name, class_name, method_name = entry
     try:

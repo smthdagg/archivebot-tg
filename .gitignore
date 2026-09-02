@@ -30,3 +30,4 @@ logs/
 # Hermes kanban worktrees / serena local
 .worktrees/
 .serena/
+.zcode

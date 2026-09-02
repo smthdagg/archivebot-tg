@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Cookies · ArchiveBOT Admin{% endblock %}
+{% block content %}
+<h2 style="margin:0 0 8px">🍪 Cookie 站点</h2>
+<p class="muted">特殊网站 Cookie 列表（白名单 + 到期时间）。仅用于用户自己已登录的站点，不绕过付费墙。</p>
+{% if banner %}
+<div style="background:#fff4e5;border:1px solid #f0c36d;border-radius:8px;padding:10px 14px;margin:12px 0;color:#8a5a00">
+  ⚠️ {{ banner }}
+</div>
+{% endif %}
+<table>
+  <thead><tr><th>站点</th><th>域名</th><th>条数</th><th>状态</th><th>过期时间</th><th>剩余</th><th>最后更新</th><th>操作</th></tr></thead>
+  <tbody>
+  {% for it in items %}
+    <tr>
+      <td>{{ it.display_name }}<div class="muted">{{ it.site_key }}</div></td>
+      <td class="muted">{{ it.domains|join(", ") }}</td>
+      <td>{{ it.count }}</td>
+      <td>
+        {% if it.status == "active" %}<span class="pill ok">{{ it.badge }} active</span>
+        {% elif it.status == "expiring" %}<span class="pill warn">{{ it.badge }} expiring</span>
+        {% elif it.status == "expired" %}<span class="pill bad">{{ it.badge }} expired</span>
+        {% else %}<span class="pill">{{ it.badge }} unknown</span>{% endif %}
+      </td>
+      <td>{{ it.expires_at.strftime("%Y-%m-%d") if it.expires_at else "—" }}</td>
+      <td>{% if it.status == "unknown" %}—{% else %}{{ it.days_left }} 天{% endif %}</td>
+      <td class="muted">{{ it.last_updated or "—" }}</td>
+      <td>
+        <form method="post" action="/admin/cookies/{{ it.site_key }}/update" enctype="multipart/form-data" style="display:inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="file" name="cookies_file" accept=".txt,.json" style="width:160px">
+          <button type="submit" class="btn ghost" style="padding:4px 8px">更新</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="muted" style="margin-top:12px">更新：上传 Netscape cookies.txt 或粘贴 Cookie: 文本（Bot 侧用 /set_cookie <site> 回复文件）。敏感值不记日志。</p>
+{% endblock %}

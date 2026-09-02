@@ -188,6 +188,127 @@ async def tasks(request: Request):
 
 
 # ---------------------------------------------------------------------------
+# Cookies（特殊网站 Cookie 列表 + 到期时间，Bot/Web 全生命周期）
+# ---------------------------------------------------------------------------
+
+def _cookie_banner() -> str | None:
+    try:
+        from app.archive.cookie_expiry import admin_cookie_list_items
+        items = admin_cookie_list_items()
+        expiring = [
+            f"{it['display_name']}（{it['days_left']} 天）"
+            for it in items if it["status"] in ("expiring", "expired")
+        ]
+        if expiring:
+            return "⚠️ Cookie 将过期/已过期：" + "、".join(expiring) + "，请到 Cookies 页更新"
+    except Exception:
+        pass
+    return None
+
+
+@router.get("/cookies", response_class=HTMLResponse)
+@login_required
+async def cookies_page(request: Request):
+    from app.archive.cookie_expiry import admin_cookie_list_items
+    items = admin_cookie_list_items()
+    banner = _cookie_banner()
+    return _render(request, "cookies.html", page="cookies", items=items, banner=banner)
+
+
+@router.post("/cookies/{site_key}/update")
+@login_required
+async def cookies_update(request: Request, site_key: str, _: None = Depends(csrf_guard)):
+    site_key = site_key.strip().lower()
+    from app.archive.cookie_parser import parse_netscape
+    from app.archive.cookie_registry import SPECIAL_SITES
+
+    if site_key not in SPECIAL_SITES:
+        return RedirectResponse("/admin/cookies", status_code=303)
+    form = await request.form()
+    file = form.get("cookies_file")
+    raw_text = ""
+    if file is not None and hasattr(file, "read"):
+        try:
+            raw_text = (await file.read()).decode("utf-8", errors="ignore")
+        except Exception:
+            raw_text = ""
+    if not raw_text or not raw_text.strip():
+        raw_text = str(form.get("cookies_text") or "")
+    if not raw_text or not raw_text.strip():
+        return RedirectResponse("/admin/cookies", status_code=303)
+    domains = SPECIAL_SITES[site_key].get("domains", [])
+    cookies = parse_netscape(raw_text, domains)
+    if not cookies:
+        # 尝试通用 Cookie: 头
+        text = raw_text.strip()
+        if text.lower().startswith("cookie:"):
+            text = text.split(":", 1)[1].strip()
+        for part in text.split(";"):
+            part = part.strip()
+            if "=" not in part:
+                continue
+            name, value = part.split("=", 1)
+            name, value = name.strip(), value.strip()
+            if name and value:
+                cookies.append({
+                    "name": name, "value": value,
+                    "domain": domains[0] if domains else ".example.com",
+                    "path": "/",
+                })
+    if not cookies:
+        return RedirectResponse("/admin/cookies", status_code=303)
+    import json as _json
+    from pathlib import Path as _Path
+
+    from app.config import get_settings as _gs
+
+    settings = _gs()
+    path_str = settings.cookie_profiles_file or "data/cookie_profiles.json"
+    path = _Path(path_str)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data: dict = {}
+    if path.exists():
+        try:
+            data = _json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            data = {}
+    platform = SPECIAL_SITES[site_key].get("platform", site_key)
+    if site_key not in data:
+        data[site_key] = {}
+    data[site_key][platform] = cookies
+    path.write_text(_json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    if not settings.cookie_profiles_file:
+        env_path = _Path(".env")
+        if env_path.exists():
+            lines = env_path.read_text(encoding="utf-8", errors="ignore").splitlines()
+            found = False
+            out = []
+            for line in lines:
+                if line.startswith("COOKIE_PROFILES_FILE="):
+                    out.append(f"COOKIE_PROFILES_FILE={path_str}")
+                    found = True
+                else:
+                    out.append(line)
+            if not found:
+                out.append(f"COOKIE_PROFILES_FILE={path_str}")
+            env_path.write_text("\n".join(out) + "\n", encoding="utf-8")
+    try:
+        _gs.cache_clear()  # type: ignore[attr-defined]
+    except Exception:
+        pass
+    db = SessionLocal()
+    try:
+        from app.database.enums import AuditAction
+        audit(db, action=AuditAction.COOKIE_UPDATED, operator_user_id=None,
+              target_type="cookie_site", target_id=site_key,
+              details={"count": len(cookies), "site_key": site_key})
+        db.commit()
+    finally:
+        db.close()
+    return RedirectResponse("/admin/cookies", status_code=303)
+
+
+# ---------------------------------------------------------------------------
 # 日志（规格 §44）
 # ---------------------------------------------------------------------------
 

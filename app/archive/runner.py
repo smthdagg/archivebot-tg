@@ -5,7 +5,6 @@
 
 import json
 import logging
-import re
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -221,7 +220,11 @@ def _rewrite_image_srcs(html: str, img_dir: Path) -> str:
             mime, _ = mimetypes.guess_type(str(file_path))
             if not mime or not mime.startswith("image/"):
                 ext = file_path.suffix.lower()
-                mime = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp"}.get(ext, "image/jpeg")
+                mime = {
+                    ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+                    ".png": "image/png", ".gif": "image/gif",
+                    ".webp": "image/webp", ".bmp": "image/bmp",
+                }.get(ext, "image/jpeg")
             data = file_path.read_bytes()
             if not data:
                 continue
