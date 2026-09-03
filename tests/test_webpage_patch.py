@@ -139,3 +139,25 @@ class TestWechatImageUrlMap:
     def test_empty_page_html_returns_empty(self):
         fn = self._make()
         assert fn("", "![a](images/01.jpg)") == {}
+
+
+class TestDedupeMedia:
+    """跨页媒体去重：财新每个分页模板都带同一张封面图。"""
+
+    def test_keeps_first_occurrence_only(self):
+        from app.archive.webpage_patch import _dedupe_media
+
+        seen: set[str] = set()
+        first = [{"src": "https://img.caixin.com/cover.jpg", "caption": "封面", "anchor": "a"}]
+        assert _dedupe_media(first, seen) == first
+        repeat = [{"src": "https://img.caixin.com/cover.jpg", "caption": "封面", "anchor": "b"}]
+        assert _dedupe_media(repeat, seen) == []
+        new_img = [{"src": "https://img.caixin.com/chart.jpg", "caption": "", "anchor": "c"}]
+        assert _dedupe_media(new_img, seen) == new_img
+
+    def test_strips_fragment_before_compare(self):
+        from app.archive.webpage_patch import _dedupe_media
+
+        seen: set[str] = set()
+        _dedupe_media([{"src": "https://img.caixin.com/a.jpg#imgIndex=1", "caption": "", "anchor": ""}], seen)
+        assert _dedupe_media([{"src": "https://img.caixin.com/a.jpg", "caption": "", "anchor": ""}], seen) == []

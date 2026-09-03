@@ -138,6 +138,18 @@ def _text_head(content_html: str, n: int = 60) -> str:
     return re.sub(r"\s+", "", text)[:n]
 
 
+def _dedupe_media(media: list[dict], seen: set[str]) -> list[dict]:
+    """过滤已合并过的媒体（财新每个分页的模板都带同一张文章内封面）。"""
+    out: list[dict] = []
+    for m in media:
+        src = (m.get("src") or "").split("#")[0]
+        if not src or src in seen:
+            continue
+        seen.add(src)
+        out.append(m)
+    return out
+
+
 def _merge_media(content_html: str, media: list[dict]) -> str:
     """把媒体块按锚点段落合并回 Readability 产物（黄金图置顶兜底）。"""
     from bs4 import BeautifulSoup
@@ -243,8 +255,11 @@ def _patch_webpage_cookies(cls=None) -> None:
             page = await context.new_page()
 
             async def _render_current_page() -> tuple[dict | None, list[dict]]:
-                """渲染当前页：滚动触发懒加载 → Readability（蜜罐/导航剔除）
-                → 提取媒体块并按锚点合并。"""
+                """渲染当前页：滚动触发懒加载 → Readability（蜜罐/导航剔除）。
+
+                媒体块只提取不合并——由调用方跨页去重后再按锚点合并，
+                否则每个分页模板里的同一张封面图会重复插入。
+                """
                 await self._goto_with_fallbacks(page, url_current)
                 await page.evaluate("""
                     async () => {
@@ -271,14 +286,15 @@ def _patch_webpage_cookies(cls=None) -> None:
                     media_n = await page.evaluate(_MEDIA_EXTRACT)
                 except Exception:  # noqa: BLE001 - 媒体提取失败不影响正文
                     logger.exception("caixin: media extract failed")
-                if art and art.get("content") and media_n:
-                    art["content"] = _merge_media(art["content"], media_n)
                 return art, media_n
 
             try:
                 url_current = url
+                seen_media: set[str] = set()
                 article, media = await _render_current_page()
-                if media:
+                media = _dedupe_media(media, seen_media)
+                if article and article.get("content") and media:
+                    article["content"] = _merge_media(article["content"], media)
                     logger.info("caixin: merged %d media blocks (page 1)", len(media))
 
                 # 长文分页：财新把多页文章拆成 ?p1..?pN（隐藏导航 li#purl*），
@@ -301,9 +317,12 @@ def _patch_webpage_cookies(cls=None) -> None:
                     except Exception:  # noqa: BLE001 - 单页失败跳过，不弃全文
                         logger.exception("caixin: page fetch failed: %s", page_url)
                         continue
+                    media_n = _dedupe_media(media_n, seen_media)
                     content_n = (art_n or {}).get("content") or ""
                     if not content_n:
                         continue
+                    if media_n:
+                        content_n = _merge_media(content_n, media_n)
                     # 防重复：?pN 被服务端忽略时会返回与上一页相同的内容
                     if _text_head(content_n) == _text_head(parts[-1]):
                         logger.info("caixin: page %s identical to previous, stop", page_url)
