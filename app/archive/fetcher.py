@@ -259,8 +259,19 @@ def fetch_article(
         cls = getattr(module, class_name)
         with inject_cookies(cls, platform, cookies):
             # TwitterService 构造与 WebpageService 不同（无 base_path）；包装层兼容
+            # 同时：若 cookie_profile 挂了 twitter 登录态（auth_token/ct0），
+            # 把它传给构造器（vendor 的 PlaywrightScraper 靠这两条渲染长文）
             try:
-                service = cls(base_path=str(task_dir), create_date_folders=False)
+                if platform == Platform.TWITTER:
+                    pair = getattr(cls, "_twitter_auth_pair", None)
+                    if isinstance(pair, dict) and pair.get("auth_token") and pair.get("ct0"):
+                        service = cls(  # type: ignore[call-arg]
+                            xreach_auth_token=pair["auth_token"], xreach_ct0=pair["ct0"]
+                        )
+                    else:
+                        service = cls(base_path=str(task_dir), create_date_folders=False)
+                else:
+                    service = cls(base_path=str(task_dir), create_date_folders=False)
             except TypeError as exc:
                 if "unexpected keyword argument 'base_path'" in str(exc):
                     service = cls()  # TwitterService 不接受 base_path

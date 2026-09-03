@@ -176,11 +176,11 @@ def test_inject_no_cookies_is_noop():
 # ---------------------------------------------------------------------------
 
 def test_support_matrix():
-    assert cookie_profile.FILE_BASED_PLATFORMS == {"wechat", "xhs", "reddit"}
-    assert cookie_profile.METHOD_BASED_PLATFORMS == {"zhihu"}
+    assert cookie_profile.FILE_BASED_PLATFORMS == {"wechat", "reddit"}
+    assert cookie_profile.METHOD_BASED_PLATFORMS == {"zhihu", "twitter", "xhs"}
     assert Platform.WEB.value in cookie_profile.UNSUPPORTED_PLATFORMS
     assert Platform.WEIBO.value in cookie_profile.UNSUPPORTED_PLATFORMS
-    assert Platform.TWITTER.value in cookie_profile.UNSUPPORTED_PLATFORMS
+    assert Platform.TWITTER.value not in cookie_profile.UNSUPPORTED_PLATFORMS
 
 
 # ---------------------------------------------------------------------------

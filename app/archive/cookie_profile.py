@@ -5,17 +5,16 @@
 
 ArchiveBOT 各平台服务的 cookie 消费方式不同，因此注入策略分三类：
 
-- **文件型**（WECHAT / XHS / REDDIT）：服务运行时从类属性 `_COOKIES_PATH`
+- **文件型**（WECHAT / REDDIT）：服务运行时从类属性 `_COOKIES_PATH`
   指向的 Cookie-Editor 格式 JSON（list of {name, value, domain, path}）读取 cookie。
   注入 = 把 profile 的 cookie 写入临时文件，并在服务调用期间把该临时文件路径
   临时挂到 `cls._COOKIES_PATH`，调用结束恢复（复用 ssrf_guard 的包装/猴子补丁思路，
   不修改 vendor 源码）。
-- **方法型**（ZHIHU）：服务通过 `_get_cookies()` 读取 cookie（DATA_DIR 下的
-  `zhihu_cookies.json` 或 config z_c0）。注入 = 临时替换 `_get_cookies` 返回
-  profile 的 cookie，调用结束恢复。
-- **不支持**（WEB / WEIBO / TWITTER）：webpage_service 与 weibo_service 无 cookie
-  读取；twitter 虽构造器接受 xreach_auth_token/ct0 但 dispatch 引用的 `save_tweet`
-  方法不存在（抓取链路本身未接通）。这些平台忽略 profile，仅记录在案（docs/05）。
+- **方法型**（ZHIHU / TWITTER / XHS）：服务通过 `_get_cookies()` 或同等
+  auth 钩子读取 cookie。注入 = 临时替换对应读取方法返回 profile 的 cookie，
+  调用结束恢复。
+- **不支持**（WEB / WEIBO）：webpage_service 与 weibo_service 无 cookie
+  读取，这些平台忽略 profile，仅记录在案（docs/05）。
 """
 
 from __future__ import annotations
@@ -38,21 +37,19 @@ _REQUIRED_COOKIE_KEYS = ("name", "value", "domain", "path")
 
 # 支持注入的平台 → 注入策略
 FILE_BASED_PLATFORMS: frozenset[str] = frozenset(
-    {Platform.WECHAT.value, Platform.XHS.value, Platform.REDDIT.value}
+    {Platform.WECHAT.value, Platform.REDDIT.value}
 )
 # 特殊网站：财新等 WEB 平台下的白名单域名，允许用 Playwright/cookie 注入抓取
 SPECIAL_WEB_COOKIE_SITES: dict[str, list[str]] = {
     "caixin": [".caixin.com", "weekly.caixin.com"],
 }
-METHOD_BASED_PLATFORMS: frozenset[str] = frozenset({Platform.ZHIHU.value})
+METHOD_BASED_PLATFORMS: frozenset[str] = frozenset(
+    {Platform.ZHIHU.value, Platform.TWITTER.value, Platform.XHS.value}
+)
 
 # 明确不支持 cookie 注入的平台（记录在案，见 docs/05）
 UNSUPPORTED_PLATFORMS: frozenset[str] = frozenset(
-    {
-        Platform.WEB.value,
-        Platform.WEIBO.value,
-        Platform.TWITTER.value,
-    }
+    {Platform.WEB.value, Platform.WEIBO.value}
 )
 
 # 已知会读取 cookie 的平台全集（用于提示）。视频类、其余平台一律不支持。
@@ -120,6 +117,7 @@ def _sanitize_cookies(
 def _default_domain(platform: Platform) -> str:
     return {
         Platform.WECHAT.value: ".mp.weixin.qq.com",
+        Platform.TWITTER.value: ".x.com",
         Platform.XHS.value: ".xiaohongshu.com",
         Platform.REDDIT.value: ".reddit.com",
         Platform.ZHIHU.value: ".zhihu.com",
@@ -137,7 +135,8 @@ def inject_cookies(
     """在调用 ArchiveBOT 服务期间注入 profile cookie，结束后恢复原状。
 
     - 文件型平台：把 cookie 写入临时文件并临时接管 `cls._COOKIES_PATH`。
-    - 方法型平台：临时替换 `_get_cookies` 类方法。
+    - 方法型平台：临时替换 `_get_cookies` 类方法，或在 Twitter/XHS 这种
+      构造参数型平台上通过钩子注入。
     - 特殊网站（如 caixin 的 WEB）：即使 platform=WEB 也允许按 url 域名匹配注入。
     - cookies 为空或平台不支持：直接放行（no-op）。
     """
@@ -151,6 +150,12 @@ def inject_cookies(
         with _file_based_injection(service_cls, cookies) as applied:
             # 让 webpage_service 也能通过 _COOKIES_PATH 消费（Playwright 读取）
             # 实际抓取走 trafilatura+Playwright，cookie 由 page.context.add_cookies 注入
+            yield applied
+        return
+    # Twitter（X）：方法型特殊分支——Playwright scraper 靠 auth_token/ct0
+    # 两个显式 cookie 登录态，不是文件型
+    if platform_value == Platform.TWITTER.value:
+        with _twitter_auth_injection(service_cls, cookies) as applied:
             yield applied
         return
     if platform_value in FILE_BASED_PLATFORMS:
@@ -182,6 +187,34 @@ def _file_based_injection(service_cls: type, cookies: list[dict[str, Any]]) -> A
             Path(tmp_path).unlink()
         except OSError:
             pass
+
+
+@contextmanager
+def _twitter_auth_injection(service_cls: type, cookies: list[dict[str, Any]]) -> Any:
+    """让 Twitter 平台的 Playwright scraper 获得登录态。
+
+    Profile 以 Cookie-Editor 列表形式存储「auth_token / ct0」两条，
+    这里提取这两条并临时挂到 `TwitterService._twitter_auth_pair`，
+    供 fetcher 在实例化 service 时传给构造器（不改 vendor 源码）。
+    """
+    wanted: dict[str, str] = {}
+    for c in cookies:
+        name = c.get("name")
+        if name in ("auth_token", "ct0"):
+            wanted[name] = str(c.get("value", ""))
+    prev = getattr(service_cls, "_twitter_auth_pair", None)
+    payload: dict[str, str] | None = wanted if wanted else None
+    service_cls._twitter_auth_pair = payload
+    try:
+        yield payload
+    finally:
+        if prev is None:
+            try:
+                delattr(service_cls, "_twitter_auth_pair")
+            except AttributeError:
+                pass
+        else:
+            service_cls._twitter_auth_pair = prev
 
 
 @contextmanager

@@ -53,12 +53,12 @@ vendor 源码，思路同 `app/archive/ssrf_guard.py`）：
 | 平台 | 策略 | ArchiveBOT 消费点 | 是否支持 |
 |---|---|---|---|
 | `wechat` | 文件型：把 cookie 写入临时文件，调用期间接管 `WechatService._COOKIES_PATH` | `wechat_service.save_article` → `_fetch_page_html` 读 `_COOKIES_PATH` | ✅ |
-| `xhs` | 文件型：接管 `XHSService._COOKIES_PATH` | `xhs_service` cookie 文件 | ✅ |
+| `twitter` | 方法型特殊（`auth_token`/`ct0`）：提取 profile 中这两条，调用期间挂到 `TwitterService._twitter_auth_pair`，fetcher 据此传给构造器 `xreach_auth_token/ct0`，由 `playwright_scraper` 注入浏览器 `add_cookies` | `twitter_service.get_tweet` → `playwright_scraper.TwitterPlaywrightScraper(context.add_cookies)` | ✅（需 profile 含登录态，否则落 `LOGIN_REQUIRED`） |
+| `xhs` | 方法型：接管 `XHSService` `_get_cookies` | `xhs_service` cookie 读取 | ✅ |
 | `reddit` | 文件型：接管 `RedditService._COOKIES_PATH` | `reddit_service.load_cookie_file` / `_credential_from_cookie_file` | ✅ |
 | `zhihu` | 方法型：调用期间替换 `ZhihuService._get_cookies` | `zhihu_service._fetch_via_api` / `_fetch_content_async` | ✅ |
 | `web` | — | `webpage_service.save_page` 无 cookie 读取 | ❌（忽略，记日志） |
 | `weibo` | — | `weibo_service` 无 cookie 读取 | ❌（忽略，记日志） |
-| `twitter` | — | 构造器接受 xreach_auth_token/ct0，但 dispatch 引用的 `save_tweet` 方法不存在（抓取链路未接通） | ❌（忽略，记日志） |
 
 文件型注入会在服务调用结束后恢复原 `_COOKIES_PATH` 并删除临时 cookie 文件，避免
 profile 间污染与凭据残留。
