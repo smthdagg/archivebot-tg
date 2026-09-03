@@ -1,6 +1,6 @@
 [project]
 name = "archivebot-tg"
-version = "0.1.0"
+version = "1.0.0"
 description = "Multi-user bilingual Telegram-driven internet document archiving and delivery platform."
 requires-python = ">=3.11"
 dependencies = [

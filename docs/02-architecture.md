@@ -1,7 +1,7 @@
 # ArchiveBOT-TG 技术架构（Architecture）
 
-> 版本：v0.1（MVP 基线）
-> 依据设计规格（pasted design doc）§35/§46/§47/§48/§50 等落地。
+> 版本：v1.0.0（首个对外发布）
+> 依据设计规格 §35/§46/§47/§48/§50 落地；发布分支 `main`，见 `docs/01` 状态表与 README 1.0 说明。
 
 ---
 
@@ -15,10 +15,11 @@
 | ADR-4 | API/Web Admin 用 **FastAPI + Jinja2 + HTMX** | 规格 §46；HTMX 保持轻量、无前端构建链；Bot 日常管理仍为主入口 |
 | ADR-5 | 数据库 **SQLAlchemy 2.0**，MVP 用 **SQLite**，DSN 可切换 **PostgreSQL** | 规格 §46/§51；模型层与方言解耦，Alembic 迁移在 M9 落地 |
 | ADR-6 | 队列 **Redis + rq**（MVP） | 规格 §35 用 Redis Queue；rq 简单可靠、天然支持延迟/重试，满足 MVP 全局并发 4 |
-| ADR-7 | PDF 生成 **Chromium Print-to-PDF**（Playwright），HTML 模板渲染 | 规格 §11 链路为 Browser Render→Clean→Normalized MD→HTML Template→Chromium PDF；对中文/复杂排版还原度高于 WeasyPrint |
+| ADR-7 | PDF 生成 **Chromium Print-to-PDF**（Playwright），HTML 模板渲染；长截图同模板 `full_page` 全页图（`screenshot.py`） | 规格 §11 链路为 Browser Render→Clean→Normalized MD→HTML Template→Chromium PDF/全页图；对中文/复杂排版还原度高于 WeasyPrint；`Markdown` 交付改远程图片引用、产物命名 `标题_日期_时间.ext` |
 | ADR-8 | 三行摘要 **不调用 LLM**，从清洗后正文取前三个有效句子 | 规格 §10：避免幻觉、与原文一致、省成本、更快；AI Summary 作为 Phase 2 可选项 |
-| ADR-9 | SSRF 防护在**入队前**做 URL 校验，worker 内再次防御 | 规格 §50；双保险（bot 快速失败 + worker 兜底） |
-| ADR-10 | 本地环境以 Docker 为准（Python 3.10-slim），宿主机仅用于编辑/测试 | ArchiveBOT 依赖 Playwright/Chromium 与系统库，容器化最稳 |
+| ADR-9 | SSRF 防护在**入队前**做 URL 校验，worker 内再次防御 | 规格 §50；双保险（bot 快速失败 + worker 兜底）；`ssrf_guard` 劫持 `Session.send` 覆盖重定向每一跳 |
+| ADR-10 | 本地环境以 Docker 为准（`python:3.12-slim`），宿主机仅用于编辑/测试 | ArchiveBOT 依赖 Playwright/Chromium 与系统库，容器化最稳；本地开发用 `uv`/`.venv`（3.12），CI 统一 3.12 |
+| ADR-11 | `X` 等登录墙平台**仅用用户自备登录态**（Cookie Profile） | 规格红线：不绕过访问控制；`twitter/xhs/wechat/reddit/zhihu` 已修通注入（`auth_token/ct0` 双域），未授权时规范落 `LOGIN_REQUIRED`；真实抓取需 `cookie_profile`，鉴别单元不碰外网 |
 
 ---
 
@@ -62,8 +63,8 @@
 | 服务 | 进程 | 说明 |
 |---|---|---|
 | bot | 1 个 asyncio 进程 | aiogram long polling；同时托管 FastAPI（Uvicorn 同进程 or 独立进程，MVP 独立进程更清晰） |
-| api | 1 个 Uvicorn 进程 | Web Admin；复用同一套 DB/配置 |
-| worker | 1 个 rq worker（可扩） | 阻塞式抓取/生成/上传；处理完后回调 Telegram |
+| api | 1 个 Uvicorn 进程 | Web Admin（Jinja2 + `edit_reply_markup`/`edit_message` 菜单与状态收尾） |
+| worker | 1 个 rq worker（可扩） | 阻塞式抓取/生成（`webpage_patch`/`wechat_patch` 含登录态与分页合并）/上传；处理完回调 Telegram |
 | redis | 官方镜像 | 队列 + 轻量缓存 |
 | db | SQLite 卷（MVP） | 挂载 volume；可切换 PostgreSQL |
 
@@ -146,7 +147,7 @@ ArchiveBot/                        # 仓库根（archivebot-tg）
 
 | 层 | 选型 | 版本建议 |
 |---|---|---|
-| 运行时 | Python | 3.10+（容器内 3.10-slim） |
+| 运行时 | Python | 3.12（容器内 `python:3.12-slim`） |
 | Telegram | aiogram | 3.x |
 | Web/API | FastAPI + Uvicorn | 0.1xx |
 | 模板 | Jinja2 + HTMX（CDN） | — |
@@ -154,7 +155,7 @@ ArchiveBot/                        # 仓库根（archivebot-tg）
 | DB | SQLite（MVP）→ PostgreSQL | 内置 / 16+ |
 | 迁移 | Alembic | 1.13+ |
 | 队列 | Redis + rq | 7 / 1.16 |
-| 浏览器 | Playwright + Chromium | 1.x |
+| 浏览器 | Playwright + Chromium / CJK 字体 / ffmpeg | 1.x（容器内 `fonts-noto-cjk`，`yt-dlp` 视频合并） |
 | 内容提取 | ArchiveBOT `services.*`（子模块） | pin commit |
 | 正文清洗 | ArchiveBOT 依赖：readability-lxml / trafilatura | 复用其 requirements |
 | PDF | Playwright page.pdf()（Chromium） | — |
