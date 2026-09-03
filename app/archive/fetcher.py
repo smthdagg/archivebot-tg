@@ -145,21 +145,27 @@ def _find_cover(save_path: Path) -> Path | None:
     return None
 
 
-# ---------------------------------------------------------------------------
-# 平台 → ArchiveBOT 服务调度表
-# 文本类平台：每个条目 (service 模块名, service 类名, save 方法名)
-# 产出 content.txt/md、images/；由 fetch_article 读取为 FetchedArticle。
-# ---------------------------------------------------------------------------
+    # ---------------------------------------------------------------------------
+    # 平台 → ArchiveBOT 服务调度表
+    # 文本类平台：每个条目 (service 模块名, service 类名, save 方法名)
+    # 产出 content.txt/md、images/；由 fetch_article 读取为 FetchedArticle。
+    # --- 验证落地报告 --- 被测平台 web/wechat。其它平台在 _DISPATCH 表里仅做
+    # 接线登记，不代表已验证交付；用 _VALIDATED_PLATFORMS 作鉴别闸门（见本段末）。
+    # ---------------------------------------------------------------------------
 
 _DISPATCH: dict[Platform, tuple[str, str, str]] = {
     Platform.WEB: ("services.webpage_service", "WebpageService", "save_page"),
     Platform.WECHAT: ("services.wechat_service", "WechatService", "save_article"),
     Platform.REDDIT: ("services.reddit_service", "RedditService", "save_post"),
-    Platform.TWITTER: ("services.twitter_service", "TwitterService", "save_tweet"),
+    Platform.TWITTER: ("services.twitter_service", "TwitterService", "get_tweet"),
     Platform.XHS: ("services.xhs_service", "XHSService", "save_post"),
     Platform.WEIBO: ("services.weibo_service", "WeiboService", "save_post"),
     Platform.ZHIHU: ("services.zhihu_service", "ZhihuService", "save_article"),
 }
+
+# 鉴别用（不触网）：已验证交付（本地+容器落盘OK）的平台集合；
+# 其它已接线平台未做真实抓取验证，打鉴别区分。
+_VALIDATED_PLATFORMS = {Platform.WEB, Platform.WECHAT}
 
 
 def fetch_article(
@@ -252,7 +258,14 @@ def fetch_article(
         module = __import__(module_name, fromlist=[class_name])
         cls = getattr(module, class_name)
         with inject_cookies(cls, platform, cookies):
-            service = cls(base_path=str(task_dir), create_date_folders=False)
+            # TwitterService 构造与 WebpageService 不同（无 base_path）；包装层兼容
+            try:
+                service = cls(base_path=str(task_dir), create_date_folders=False)
+            except TypeError as exc:
+                if "unexpected keyword argument 'base_path'" in str(exc):
+                    service = cls()  # TwitterService 不接受 base_path
+                else:
+                    raise
             result = getattr(service, method_name)(url)
             if platform == Platform.WECHAT:
                 page_html = getattr(service, "_last_page_html", "")
@@ -361,6 +374,12 @@ def _classify(platform: Platform, exc: Exception) -> str:
         return "HTTP 403"
     if "login" in text or "captcha" in text:
         return "Login required."
+    # 已接入但未装登录态，底层抛的 not adapted 也视为需登录
+    if "not adapted" in text and platform.value in EXTERNAL_COOKIE_PLATFORMS:
+        return "Login required."
+    # X 平台所有风控提取都失败（实测 90s+ 才返回）——同视为需登录
+    if platform == Platform.TWITTER and ("所有提取策略都失败" in str(exc) or "所有策略" in str(exc)):
+        return "Login required."
     if "404" in text or "not found" in text:
         return "Page not found"
     if "timeout" in text:
@@ -373,6 +392,11 @@ def _classify_code(platform: Platform, exc: Exception) -> str:
     if "403" in text or "forbidden" in text:
         return ErrorCode.HTTP_FORBIDDEN
     if "login" in text or "captcha" in text:
+        return ErrorCode.LOGIN_REQUIRED
+    # 已接入但未装登录态，底层抛的 not adapted 也视为需登录
+    if "not adapted" in text and platform.value in EXTERNAL_COOKIE_PLATFORMS:
+        return ErrorCode.LOGIN_REQUIRED
+    if platform == Platform.TWITTER and ("所有提取策略都失败" in str(exc) or "所有策略" in str(exc)):
         return ErrorCode.LOGIN_REQUIRED
     if "404" in text or "not found" in text:
         return ErrorCode.NOT_FOUND
