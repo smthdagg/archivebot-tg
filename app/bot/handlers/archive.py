@@ -98,11 +98,11 @@ async def on_format_selected(callback: types.CallbackQuery, state: FSMContext) -
         try:
             # 特殊网站（财新等 WEB）按 url 自动关联可用 cookie profile
             auto_profile = None
-            if platform == Platform.WEB.value:
-                try:
-                    from app.archive.cookie_registry import SPECIAL_SITES as _SS
-                    from app.config import get_settings as _GS
-                    _profs = _GS().cookie_profiles or {}
+            try:
+                from app.archive.cookie_registry import SPECIAL_SITES as _SS
+                from app.config import get_settings as _GS
+                _profs = _GS().cookie_profiles or {}
+                if platform == Platform.WEB.value:
                     for _k, _cfg in _SS.items():
                         if _cfg.get("platform") != Platform.WEB.value:
                             continue
@@ -113,8 +113,12 @@ async def on_format_selected(callback: types.CallbackQuery, state: FSMContext) -
                                     break
                         if auto_profile:
                             break
-                except Exception:
-                    pass
+                elif platform == Platform.TWITTER.value:
+                    # X 登录墙：若存在名为 "x" 的 twitter profile，自动关联
+                    if "x" in _profs and "twitter" in _profs.get("x", {}):
+                        auto_profile = "x"
+            except Exception:
+                pass
             task = task_manager.create_task(
                 db,
                 user_id=user.id,
