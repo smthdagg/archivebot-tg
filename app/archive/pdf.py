@@ -1,13 +1,13 @@
 """PDF 生成（设计规格 §11）。
 
 链路：清洗后 HTML → HTML 模板 → Chromium Print-to-PDF。
-PDF 页包含：标题、作者、来源、发布时间、原始 URL、正文、图片、页码、归档时间。
-
-注意：Chromium print-to-PDF 不支持 CSS Paged Media 的 margin box
-（@bottom-center 等），页码必须通过 Playwright 的 footer_template 实现。
+版式：顶部标题 → 正文（含图片）→ 文末信息块（作者/来源/发布时间/原始链接，
+不含标题——标题在顶部已出现，信息块不再重复）+ 来源免责声明与生成时间。
+页码走 Playwright footer_template（Chromium 不支持 CSS margin box）。
 """
 
 import logging
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -43,17 +43,16 @@ _TEMPLATE = """<!DOCTYPE html>
 </head>
 <body>
   <h1>{title}</h1>
-  <div class="meta">作者 / Author：{author}</div>
-  <div class="meta">来源 / Source：{source}</div>
-  <div class="meta">发布时间 / Published：{published}</div>
-  <div class="meta">原始链接 / Original：<span class="url">{url}</span></div>
-  <hr class="rule">
   <div class="content">
 {content_html}
   </div>
   <hr class="rule">
   <div class="footer">
-    文章来源互联网，仅供参考，如涉及商用请与财新官方联系。 · 生成时间 {archived_at}
+    <div class="meta">作者 / Author：{author}</div>
+    <div class="meta">来源 / Source：{source}</div>
+    <div class="meta">发布时间 / Published：{published}</div>
+    <div class="meta">原始链接 / Original：<span class="url">{url}</span></div>
+    <div>文章来源互联网，仅供参考，如涉及商用请与财新官方联系。 · 生成时间 {archived_at}</div>
   </div>
 </body>
 </html>
@@ -69,6 +68,27 @@ def _escape(text: str) -> str:
     )
 
 
+def _strip_body_duplicates(content_html: str, title: str, author: str, source: str) -> str:
+    """去掉正文中与模板重复的部分：
+
+    - 与顶部标题相同的 h1/h2（vendor reader/微信 md 都会自带标题）；
+    - vendor reader 的灰色 meta 行（作者 · 来源 · 时间，与文末信息块重复）。
+    """
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(content_html, "html.parser")
+    norm_title = re.sub(r"\s+", "", title or "")
+    if norm_title:
+        for h in soup.find_all(["h1", "h2"]):
+            if re.sub(r"\s+", "", h.get_text()) == norm_title:
+                h.decompose()
+    for p in soup.find_all("p", style=lambda s: bool(s) and "color:#888" in s):
+        txt = p.get_text()
+        if "·" in txt and (source in txt or (author and author in txt)):
+            p.decompose()
+    return str(soup)
+
+
 def _render_html(
     *,
     title: str,
@@ -79,14 +99,14 @@ def _render_html(
     content_html: str,
     archived_at: datetime,
 ) -> str:
-    """填充 HTML 模板（正文不转义，其余字段转义）。"""
+    """填充 HTML 模板（正文不转义、去重后填入，其余字段转义）。"""
     return _TEMPLATE.format(
         title=_escape(title or "Untitled"),
         author=_escape(author or "-"),
         source=_escape(source or "-"),
         published=_escape(published or "-"),
         url=_escape(url),
-        content_html=content_html,
+        content_html=_strip_body_duplicates(content_html, title or "", author or "", source or ""),
         archived_at=archived_at.strftime("%Y-%m-%d %H:%M"),
     )
 
