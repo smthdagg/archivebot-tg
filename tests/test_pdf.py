@@ -52,13 +52,12 @@ def test_info_block_at_end_without_title():
     assert "文章来源互联网" in footer_part
 
 
-def test_body_duplicate_title_and_reader_meta_removed():
-    """正文里与标题重复的 h1 与 vendor 灰色 meta 行被移除。"""
+def test_body_front_matter_kept_template_title_suppressed():
+    """正文自带的 标题/作者/发布时间 原样保留在前面，模板不再额外加标题。"""
     content = (
         "<h1>我的文章</h1>"
         '<p style="color:#888;font-size:0.9em">作者：张三 · https://example.com · 2026-09-01</p>'
         "<p>正文第一段</p>"
-        "<h2>章节标题</h2>"
     )
     html = pdf._render_html(
         title="我的文章",
@@ -69,7 +68,23 @@ def test_body_duplicate_title_and_reader_meta_removed():
         content_html=content,
         archived_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
     )
-    assert html.count("<h1>") == 1  # 只剩模板顶部标题
-    assert "color:#888" not in html
+    assert html.count("<h1>") == 1  # 只有正文自己的标题
+    assert 'color:#888' in html  # 作者/发布时间行保留
     assert "正文第一段" in html
-    assert "<h2>章节标题</h2>" in html  # 非标题的 h2 保留
+    footer_part = html[html.index('class="footer"'):]
+    assert "我的文章" not in footer_part  # 文末信息块不含标题
+
+
+def test_template_supplies_title_when_body_has_none():
+    """正文没有标题时，模板补一个 h1 标题。"""
+    html = pdf._render_html(
+        title="我的文章",
+        author="张三",
+        source="https://example.com",
+        published="2026-09-01",
+        url="https://example.com/a",
+        content_html="<p>正文第一段</p>",
+        archived_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
+    )
+    assert html.count("<h1>") == 1
+    assert "<h1>我的文章</h1>" in html

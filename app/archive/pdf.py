@@ -1,8 +1,8 @@
 """PDF 生成（设计规格 §11）。
 
 链路：清洗后 HTML → HTML 模板 → Chromium Print-to-PDF。
-版式：顶部标题 → 正文（含图片）→ 文末信息块（作者/来源/发布时间/原始链接，
-不含标题——标题在顶部已出现，信息块不再重复）+ 来源免责声明与生成时间。
+版式：正文在前（自带的 标题/作者/发布时间 原样保留；正文无标题时模板补一个），
+文末信息块（作者/来源/发布时间/原始链接，不含标题）+ 来源免责声明与生成时间。
 页码走 Playwright footer_template（Chromium 不支持 CSS margin box）。
 """
 
@@ -42,7 +42,7 @@ _TEMPLATE = """<!DOCTYPE html>
 </style>
 </head>
 <body>
-  <h1>{title}</h1>
+{title_html}
   <div class="content">
 {content_html}
   </div>
@@ -68,25 +68,18 @@ def _escape(text: str) -> str:
     )
 
 
-def _strip_body_duplicates(content_html: str, title: str, author: str, source: str) -> str:
-    """去掉正文中与模板重复的部分：
-
-    - 与顶部标题相同的 h1/h2（vendor reader/微信 md 都会自带标题）；
-    - vendor reader 的灰色 meta 行（作者 · 来源 · 时间，与文末信息块重复）。
-    """
+def _body_has_title_heading(content_html: str, title: str) -> bool:
+    """正文里是否已有与标题一致的 h1/h2（有则模板不再重复加标题）。"""
     from bs4 import BeautifulSoup
 
-    soup = BeautifulSoup(content_html, "html.parser")
     norm_title = re.sub(r"\s+", "", title or "")
-    if norm_title:
-        for h in soup.find_all(["h1", "h2"]):
-            if re.sub(r"\s+", "", h.get_text()) == norm_title:
-                h.decompose()
-    for p in soup.find_all("p", style=lambda s: bool(s) and "color:#888" in s):
-        txt = p.get_text()
-        if "·" in txt and (source in txt or (author and author in txt)):
-            p.decompose()
-    return str(soup)
+    if not norm_title:
+        return False
+    soup = BeautifulSoup(content_html, "html.parser")
+    for h in soup.find_all(["h1", "h2"]):
+        if re.sub(r"\s+", "", h.get_text()) == norm_title:
+            return True
+    return False
 
 
 def _render_html(
@@ -99,14 +92,21 @@ def _render_html(
     content_html: str,
     archived_at: datetime,
 ) -> str:
-    """填充 HTML 模板（正文不转义、去重后填入，其余字段转义）。"""
+    """填充 HTML 模板（正文不转义原样保留，其余字段转义）。
+
+    正文自带的 标题/作者/发布时间 保持在前；仅当正文没有标题时模板补一个。
+    """
+    title_html = (
+        "" if _body_has_title_heading(content_html, title or "") else f"<h1>{_escape(title or 'Untitled')}</h1>"
+    )
     return _TEMPLATE.format(
         title=_escape(title or "Untitled"),
+        title_html=title_html,
         author=_escape(author or "-"),
         source=_escape(source or "-"),
         published=_escape(published or "-"),
         url=_escape(url),
-        content_html=_strip_body_duplicates(content_html, title or "", author or "", source or ""),
+        content_html=content_html,
         archived_at=archived_at.strftime("%Y-%m-%d %H:%M"),
     )
 
