@@ -68,13 +68,32 @@ def normalize_caixin_url(url: str) -> str:
     return urlunsplit((parts.scheme, parts.netloc, path, urlencode(query), ""))
 
 
-# Readability 解析：在克隆上剔除蜜罐段落（不影响 Vue 管理的 live DOM）
-_PARSE_WITH_HONEYPOT_REMOVED = """
+# Readability 解析：在克隆上剔除蜜罐段落与分页导航（不影响 Vue 管理的 live DOM）
+_PARSE_WITH_CLEANUP = """
     () => {
         var doc = document.cloneNode(true);
         doc.querySelectorAll('p.aitt').forEach(function (el) { el.remove(); });
+        // 分页导航（隐藏的 li#purl* 列表与可见翻页链接）——拼接版不需要
+        var navUl = doc.querySelector('li[id^="purl"]');
+        if (navUl && navUl.parentElement) navUl.parentElement.remove();
+        doc.querySelectorAll('a').forEach(function (a) {
+            var t = (a.textContent || '').trim();
+            if (t === '下一页' || t === '上一页' || t === '余下全文' || t === '本文导航') {
+                var holder = a.closest('p') || a;
+                holder.remove();
+            }
+        });
         var reader = new Readability(doc);
         return reader.parse();
+    }
+"""
+
+# 提取分页链接（?p1..?pN，文档顺序）
+_PAGE_URLS = """
+    () => {
+        const out = [];
+        document.querySelectorAll('li[id^="purl"] a[href]').forEach(a => out.push(a.href));
+        return out;
     }
 """
 
@@ -109,6 +128,14 @@ _MEDIA_EXTRACT = """
         return out;
     }
 """
+
+
+def _text_head(content_html: str, n: int = 60) -> str:
+    """取内容片段的去空白文本前缀，用于判断翻页抓取是否返回了重复内容。"""
+    from bs4 import BeautifulSoup
+
+    text = BeautifulSoup(content_html, "html.parser").get_text(separator="")
+    return re.sub(r"\s+", "", text)[:n]
 
 
 def _merge_media(content_html: str, media: list[dict]) -> str:
@@ -214,8 +241,11 @@ def _patch_webpage_cookies(cls=None) -> None:
                 logger.info("caixin: injected %d cookies for %s", len(valid), url[:60])
 
             page = await context.new_page()
-            try:
-                await self._goto_with_fallbacks(page, url)
+
+            async def _render_current_page() -> tuple[dict | None, list[dict]]:
+                """渲染当前页：滚动触发懒加载 → Readability（蜜罐/导航剔除）
+                → 提取媒体块并按锚点合并。"""
+                await self._goto_with_fallbacks(page, url_current)
                 await page.evaluate("""
                     async () => {
                         await new Promise(resolve => {
@@ -233,19 +263,59 @@ def _patch_webpage_cookies(cls=None) -> None:
                     }
                 """)
                 await page.wait_for_timeout(1000)
+                # 每次导航都会重置页面脚本，Readability 需重新注入
                 await page.add_script_tag(content=readability_src)
-                article = await page.evaluate(_PARSE_WITH_HONEYPOT_REMOVED)
-                media = []
+                art = await page.evaluate(_PARSE_WITH_CLEANUP)
+                media_n: list[dict] = []
                 try:
-                    media = await page.evaluate(_MEDIA_EXTRACT)
+                    media_n = await page.evaluate(_MEDIA_EXTRACT)
                 except Exception:  # noqa: BLE001 - 媒体提取失败不影响正文
                     logger.exception("caixin: media extract failed")
+                if art and art.get("content") and media_n:
+                    art["content"] = _merge_media(art["content"], media_n)
+                return art, media_n
+
+            try:
+                url_current = url
+                article, media = await _render_current_page()
+                if media:
+                    logger.info("caixin: merged %d media blocks (page 1)", len(media))
+
+                # 长文分页：财新把多页文章拆成 ?p1..?pN（隐藏导航 li#purl*），
+                # 逐页用同一浏览器上下文（cookie 保持）渲染后按顺序拼接正文
+                try:
+                    page_urls = await page.evaluate(_PAGE_URLS)
+                except Exception:  # noqa: BLE001
+                    page_urls = []
+                if page_urls:
+                    logger.info("caixin: detected %d extra pages", len(page_urls))
+                seen_pages = {url}
+                parts = [(article or {}).get("content") or ""]
+                for page_url in page_urls[:30]:
+                    if page_url in seen_pages:
+                        continue
+                    seen_pages.add(page_url)
+                    url_current = page_url
+                    try:
+                        art_n, media_n = await _render_current_page()
+                    except Exception:  # noqa: BLE001 - 单页失败跳过，不弃全文
+                        logger.exception("caixin: page fetch failed: %s", page_url)
+                        continue
+                    content_n = (art_n or {}).get("content") or ""
+                    if not content_n:
+                        continue
+                    # 防重复：?pN 被服务端忽略时会返回与上一页相同的内容
+                    if _text_head(content_n) == _text_head(parts[-1]):
+                        logger.info("caixin: page %s identical to previous, stop", page_url)
+                        break
+                    parts.append(content_n)
+                    if media_n:
+                        logger.info("caixin: page %s merged %d media", page_url, len(media_n))
+                if len(parts) > 1 and article is not None:
+                    article["content"] = "".join(parts)
+                    logger.info("caixin: merged %d pages into content", len(parts))
             finally:
                 await browser.close()
-
-            if article and article.get("content") and media:
-                article["content"] = _merge_media(article["content"], media)
-                logger.info("caixin: merged %d media blocks into content", len(media))
             return article
 
     def _save_page_patched(self, page_url: str) -> dict:
