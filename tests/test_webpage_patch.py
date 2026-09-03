@@ -11,6 +11,10 @@ class TestNormalizeCaixinUrl:
         url = "https://weekly.caixin.com/2026-08-29/102479584.html?p0#page2"
         assert normalize_caixin_url(url) == "https://weekly.caixin.com/2026-08-29/102479584.html"
 
+    def test_mobile_path_normalized_to_desktop(self):
+        url = "https://weekly.caixin.com/m/2026-08-29/102479596.html?p0#page2"
+        assert normalize_caixin_url(url) == "https://weekly.caixin.com/2026-08-29/102479596.html"
+
     def test_keeps_other_query_params(self):
         url = "https://weekly.caixin.com/a.html?p0&foo=bar#page2"
         assert normalize_caixin_url(url) == "https://weekly.caixin.com/a.html?foo=bar"

@@ -53,12 +53,19 @@ def _load_caixin_cookies() -> list[dict]:
 
 
 def normalize_caixin_url(url: str) -> str:
-    """去掉 #pageN fragment 与 p0 参数：归档始终取第 1 页完整正文。"""
+    """归一化财新 URL：桌面版单页结构最完整（cookie 全文 + 黄金图容器）。
+
+    - /m/ 手机版路径 → 桌面版（手机模板无 article_media_pic 等容器，图片丢失；
+      正文亦为 H5 分页变体）
+    - 去掉 #pageN fragment 与 p0 参数（#page2 是图集分页，渲染结果只有
+      1 图 + 试读正文）
+    """
     from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
     parts = urlsplit(url)
+    path = re.sub(r"^(/m/)", "/", parts.path, count=1)
     query = [(k, v) for k, v in parse_qsl(parts.query) if k != "p0"]
-    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), ""))
+    return urlunsplit((parts.scheme, parts.netloc, path, urlencode(query), ""))
 
 
 # Readability 解析：在克隆上剔除蜜罐段落（不影响 Vue 管理的 live DOM）
