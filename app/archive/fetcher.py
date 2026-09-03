@@ -277,7 +277,19 @@ def fetch_article(
                     service = cls()  # TwitterService 不接受 base_path
                 else:
                     raise
-            result = getattr(service, method_name)(url)
+            raw = getattr(service, method_name)(url)
+            # TwitterService.get_tweet 返回 Tweet 对象（非 save_path 字典），此处桥接为 FetchedArticle 布局
+            is_tweet = (
+                platform == Platform.TWITTER
+                and raw is not None
+                and hasattr(raw, 'text')
+                and hasattr(raw, 'author_username')
+            )
+            if is_tweet:
+                page_html = getattr(raw, 'text', '') or ''
+                article = _tweet_to_article(raw, task_dir, url)
+                return article
+            result = raw
             if platform == Platform.WECHAT:
                 page_html = getattr(service, "_last_page_html", "")
     except ImportError as e:
@@ -416,3 +428,102 @@ def _classify_code(platform: Platform, exc: Exception) -> str:
     if "empty" in text or "no content" in text or "no title" in text:
         return ErrorCode.EMPTY_CONTENT
     return ErrorCode.UNKNOWN
+
+
+def _tweet_to_article(tweet, task_dir: Path, url: str) -> "FetchedArticle":
+    """把 TwitterService 返回的 Tweet 对象落盘为 FetchedArticle 布局。
+
+    不改 vendor：Tweet 本身无 save_path，切片在 task_dir 下自建目录，
+    产出 content.{md,txt,html} + images/ + metadata.json，再走统一交付链路。
+    """
+    import hashlib
+    import json as _json
+
+
+    # 复用项目目录命名（避免与其它平台 save_path 冲突）
+    tid = getattr(tweet, "id", "tweet") or "tweet"
+    folder = (
+        f"{__import__('datetime').datetime.now().strftime('%Y-%m-%d')}"
+        f"_x_{tid}_{hashlib.md5(url.encode()).hexdigest()[:6]}"
+    )
+    post_dir = task_dir / folder
+    post_dir.mkdir(parents=True, exist_ok=True)
+
+    # 下载媒体（头像与配图）
+    images: list[Path] = []
+    try:
+        import requests as _req
+
+        media_urls = getattr(tweet, "media_urls", []) or []
+        media_types = getattr(tweet, "media_types", []) or []
+        for idx, (u, t) in enumerate(
+            zip(media_urls, media_types, strict=False), start=1
+        ):
+            if not u or t not in ("photo", "avatar", "image"):
+                continue
+            try:
+                resp = _req.get(u, timeout=20, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://x.com/"})
+                resp.raise_for_status()
+                ext = ".jpg" if u.lower().endswith(".jpg") or "jpg" in u.lower() else ".png"
+                if t == "avatar":
+                    fname = "avatar.jpg"
+                else:
+                    fname = f"{idx:02d}{ext}"
+                p = post_dir / "images" / fname if t != "avatar" else post_dir / "avatar.jpg"
+                p.parent.mkdir(parents=True, exist_ok=True)
+                if not p.exists():
+                    p.write_bytes(resp.content)
+                images.append(p)
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+    text = getattr(tweet, "text", "") or ""
+    author = getattr(tweet, "author_name", "") or ""
+    username = getattr(tweet, "author_username", "") or ""
+    html_content = getattr(tweet, "html_content", None) or f"<p>{text}</p>"
+
+    # 简易富文本产出（供 pdf/screenshot 复用）
+    md_lines = []
+    title_line = f"# @{username} — {text[:50]}" if username else f"# Tweet {tid}"
+    md_lines.append(title_line)
+    md_lines.append("")
+    if author:
+        md_lines.append(f"**Author**: {author} (@{username})")
+        md_lines.append("")
+    md_lines.append(text)
+    (post_dir / "content.md").write_text("\n".join(md_lines), encoding="utf-8")
+    (post_dir / "content.txt").write_text(text, encoding="utf-8")
+    (post_dir / "content.html").write_text(html_content, encoding="utf-8")
+
+    meta = {
+        "id": tid,
+        "title": text[:80] if text else tid,
+        "author": author,
+        "author_username": username,
+        "created_at": (
+            tweet.created_at.isoformat()
+            if hasattr(tweet.created_at, "isoformat")
+            else ""
+        ),
+        "source_url": url,
+    }
+    try:
+        (post_dir / "metadata.json").write_text(_json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+    return FetchedArticle(
+        title=meta["title"] or tid,
+        author=author,
+        sitename="x.com",
+        published_at=meta.get("created_at", "") or "",
+        source_url=url,
+        markdown=(post_dir / "content.md").read_text(encoding="utf-8"),
+        html=(post_dir / "content.html").read_text(encoding="utf-8"),
+        text=(post_dir / "content.txt").read_text(encoding="utf-8"),
+        images=images,
+        save_path=post_dir,
+        page_html=text,
+    )
