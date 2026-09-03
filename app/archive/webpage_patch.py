@@ -68,11 +68,17 @@ def normalize_caixin_url(url: str) -> str:
     return urlunsplit((parts.scheme, parts.netloc, path, urlencode(query), ""))
 
 
-# Readability 解析：在克隆上剔除蜜罐段落与分页导航（不影响 Vue 管理的 live DOM）
+# Readability 解析：在克隆上剔除蜜罐/分页导航/AI 组件/重复标题/页内重复封面
+# captions 参数 = 当前页提取到的媒体图注（桌面模板会把同一封面在正文内再渲染一份，
+# 且那份是裸 <dl><dt><img><dd>，不带 media_pic 类，媒体提取拿不到，只能按图注匹配剔除）
 _PARSE_WITH_CLEANUP = """
-    () => {
+    (captions) => {
         var doc = document.cloneNode(true);
         doc.querySelectorAll('p.aitt').forEach(function (el) { el.remove(); });
+        // AI 猜你想问组件
+        doc.querySelectorAll('#questions_container').forEach(function (el) { el.remove(); });
+        // 正文内重复的文章标题（#conTit，标题已由 content.md 头部承载）
+        doc.querySelectorAll('#conTit').forEach(function (el) { el.remove(); });
         // 分页导航（隐藏的 li#purl* 列表与可见翻页链接）——拼接版不需要
         var navUl = doc.querySelector('li[id^="purl"]');
         if (navUl && navUl.parentElement) navUl.parentElement.remove();
@@ -81,6 +87,22 @@ _PARSE_WITH_CLEANUP = """
             if (t === '下一页' || t === '上一页' || t === '余下全文' || t === '本文导航') {
                 var holder = a.closest('p') || a;
                 holder.remove();
+            }
+        });
+        // 页内重复封面：dl 内 img+图注 与已提取媒体图注一致 → 移除（由媒体合并回插）
+        (captions || []).forEach(function (cap) {
+            if (!cap) return;
+            doc.querySelectorAll('dl').forEach(function (dl) {
+                var dd = dl.querySelector('dd');
+                var img = dl.querySelector('img');
+                if (dd && img && (dd.textContent || '').trim() === cap) dl.remove();
+            });
+        });
+        // 自引用图片链接（文末「阅读原文」式回链）整体移除
+        doc.querySelectorAll('a[href] img').forEach(function (img) {
+            var a = img.closest('a');
+            if (a && a.href && location.pathname && a.href.indexOf(location.pathname) !== -1) {
+                a.remove();
             }
         });
         var reader = new Readability(doc);
@@ -280,12 +302,14 @@ def _patch_webpage_cookies(cls=None) -> None:
                 await page.wait_for_timeout(1000)
                 # 每次导航都会重置页面脚本，Readability 需重新注入
                 await page.add_script_tag(content=readability_src)
-                art = await page.evaluate(_PARSE_WITH_CLEANUP)
+                # 先提取媒体（图注供克隆清理匹配页内重复封面），再解析正文
                 media_n: list[dict] = []
                 try:
                     media_n = await page.evaluate(_MEDIA_EXTRACT)
                 except Exception:  # noqa: BLE001 - 媒体提取失败不影响正文
                     logger.exception("caixin: media extract failed")
+                captions = [m.get("caption") or "" for m in media_n]
+                art = await page.evaluate(_PARSE_WITH_CLEANUP, captions)
                 return art, media_n
 
             try:
