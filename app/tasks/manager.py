@@ -152,6 +152,38 @@ def global_active_task_count(db: Session) -> int:
     ) or 0
 
 
+def reap_stale_tasks(db: Session, timeout_seconds: int) -> int:
+    """回收僵尸任务：超过超时仍未结束的非终态任务置为 FAILED。
+
+    场景：worker 崩溃/重启后任务状态卡在 FETCHING/PARSING/...，会永久占用
+    并发槽，导致之后所有任务报 Concurrency limit reached（生产事故）。
+    worker 每次处理任务前调用，self-heal。
+    """
+    from datetime import timedelta
+
+    from app.database.models import Task as _Task
+
+    deadline = now_utc() - timedelta(seconds=max(timeout_seconds, 60))
+    stale = list(db.scalars(
+        select(_Task)
+        .where(
+            _Task.status.in_(TaskStatus.processing_statuses()),
+            _Task.created_at < deadline,
+        )
+        .limit(50)
+    ))
+    for task in stale:
+        task.status = TaskStatus.FAILED.value
+        task.completed_at = now_utc()
+        task.error_code = ErrorCode.TIMEOUT.value
+        task.error_message = "stale task reaped (worker lost or crashed)"
+        db.add(task)
+    if stale:
+        db.commit()
+        logger.warning("reaped %d stale task(s) older than %ss", len(stale), timeout_seconds)
+    return len(stale)
+
+
 def processing_storage_uuids(db: Session) -> list[str]:
     """返回所有运行中（PROCESSING/UPLOADING）任务的存储目录 uuid。
 

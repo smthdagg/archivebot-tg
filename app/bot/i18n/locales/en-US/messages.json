@@ -110,5 +110,6 @@
   "platform.feishu": "Feishu",
   "platform.web": "Generic Web Page",
   "platform.unknown": "Unknown",
-  "archive.output_screenshot": "Screenshot"
+  "archive.output_screenshot": "Screenshot",
+  "error.concurrency_limit": "You have tasks in progress, please try again later"
 }

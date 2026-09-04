@@ -68,11 +68,16 @@ def _process(db, task_id: int) -> dict:
     lang = user.language if user else settings.default_language
 
     # 并发限制（规格 §34）：单用户/全局上限
+    # 先回收僵尸任务（worker 崩溃遗留的卡死任务会永久占用并发槽），再计数
+    try:
+        task_manager.reap_stale_tasks(db, settings.task_timeout_seconds)
+    except Exception:  # noqa: BLE001 - 回收失败不阻断任务
+        logger.exception("reap_stale_tasks failed")
     if (
         task_manager.user_active_task_count(db, task.user_id) >= settings.max_user_concurrency
         or task_manager.global_active_task_count(db) >= settings.max_global_concurrency
     ):
-        _fail(db, task, ErrorCode.UNKNOWN, "Concurrency limit reached", lang)
+        _fail(db, task, ErrorCode.CONCURRENCY_LIMIT, "Concurrency limit reached", lang)
         return {"status": TaskStatus.FAILED}
 
     storage = get_storage()
@@ -369,6 +374,7 @@ def _error_text(code: str, lang: str) -> str:
         ErrorCode.PDF_GENERATION_FAILED: "error.pdf_generation_failed",
         ErrorCode.TELEGRAM_UPLOAD_FAILED: "error.telegram_upload_failed",
         ErrorCode.STORAGE_FULL: "error.storage_full",
+        ErrorCode.CONCURRENCY_LIMIT: "error.concurrency_limit",
     }
     return t(lang, mapping.get(code, "error.unknown"))
 

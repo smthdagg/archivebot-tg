@@ -110,5 +110,6 @@
   "platform.feishu": "飞书",
   "platform.web": "普通网页 / Web",
   "platform.unknown": "未知 / Unknown",
-  "archive.output_screenshot": "长截图"
+  "archive.output_screenshot": "长截图",
+  "error.concurrency_limit": "有任务正在处理，请稍后再试 / You have tasks in progress, please try again later"
 }
