@@ -37,7 +37,7 @@ _TEMPLATE = """<!DOCTYPE html>
   .rule {{ border: none; border-top: 1px solid #ddd; margin: 18px 0; }}
   .content img {{ max-width: 100%; height: auto; display: block; margin: 12px auto; }}
   .content p {{ margin: 10px 0; }}
-  h1 {{ font-size: 22px; line-height: 1.4; }}
+  h1 {{ font-size: 22px; line-height: 1.4; text-align: center; margin: 0 0 14px; }}
   .footer {{ margin-top: 24px; color: #999; font-size: 12px; }}
 </style>
 </head>
