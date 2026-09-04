@@ -38,6 +38,8 @@ _TEMPLATE = """<!DOCTYPE html>
   .content img {{ max-width: 100%; height: auto; display: block; margin: 12px auto; }}
   .content p {{ margin: 10px 0; }}
   h1 {{ font-size: 22px; line-height: 1.4; text-align: center; margin: 0 0 14px; }}
+  /* vendor reader 的作者/来源/时间 meta 行跟随标题居中 */
+  .content p[style*="color:#888"] {{ text-align: center; margin: 0 0 12px; }}
   .footer {{ margin-top: 24px; color: #999; font-size: 12px; }}
 </style>
 </head>
