@@ -129,6 +129,7 @@ WEB_ADMIN_PASSWORD=change-me-strong-password
 - [docs/01-task-breakdown.md](docs/01-task-breakdown.md) — 里程碑 M0–M9 状态表（唯一事实源），M2 已含 `web/wechat/财新分页/X` 的真实验证注明
 - [docs/02-architecture.md](docs/02-architecture.md) — 架构与 10 条 ADR、数据模型、关键流程、安全设计
 - [docs/03-acceptance.md](docs/03-acceptance.md) / [docs/04-deployment.md](docs/04-deployment.md) / [docs/05-cookie-profile.md](docs/05-cookie-profile.md)
+- [docs/07-vps-deployment.md](docs/07-vps-deployment.md) — **当前 VPS 实际部署实例**（`/opt/archivebot`：容器组成、访问方式、运维命令、安全封锁、共存服务）
 
 ## 1.0 发布说明
 

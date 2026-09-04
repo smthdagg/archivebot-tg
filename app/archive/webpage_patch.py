@@ -114,7 +114,10 @@ _PARSE_WITH_CLEANUP = """
 _PAGE_URLS = """
     () => {
         const out = [];
-        document.querySelectorAll('li[id^="purl"] a[href]').forEach(a => out.push(a.href));
+        document.querySelectorAll('li[id^="purl"] a[href]').forEach(a => {
+            // 当前页的导航项是 javascript:void(0)，跳过避免无效导航
+            if (a.href && a.href.indexOf('javascript:') !== 0) out.push(a.href);
+        });
         return out;
     }
 """
@@ -332,6 +335,9 @@ def _patch_webpage_cookies(cls=None) -> None:
                 seen_pages = {url}
                 parts = [(article or {}).get("content") or ""]
                 for page_url in page_urls[:30]:
+                    # 双保险：过滤非 http(s) 的分页链接（当前页导航项是 javascript:void）
+                    if not page_url.startswith(("http://", "https://")):
+                        continue
                     if page_url in seen_pages:
                         continue
                     seen_pages.add(page_url)

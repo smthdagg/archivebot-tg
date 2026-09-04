@@ -55,8 +55,10 @@ async def on_url_message(message: types.Message, state: FSMContext) -> None:
             return
 
         platform = detect(url)
-        await message.answer(t(lang, "url.parsing"))
+        # 合并「解析中」与「预览+格式选择」为一条消息：省一次 Telegram API
+        # 往返（VPS 上每次 RTT ≈ 0.5s，用户感知的“bot 反应慢”主要来自这里）
         await message.answer(
+            f"{t(lang, 'url.parsing')}\n"
             f"{t(lang, 'url.platform', platform=t(lang, platform_label_key(platform)))}\n"
             f"{t(lang, 'url.title', title=url)}",
             reply_markup=format_selector(lang),

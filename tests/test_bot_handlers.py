@@ -294,10 +294,10 @@ def test_archive_valid_url_enters_fsm(db, patch_session, safe_ssrf):
     fsm = _FakeFSM()
     _run(archive_mod.on_url_message(msg, fsm))
 
-    # parsing + 平台/格式选择两条消息
-    assert len(msg.answers) == 2
+    # 解析 + 平台/格式选择合并为一条消息（省一次 Telegram API 往返）
+    assert len(msg.answers) == 1
     assert "parsing" in msg.answers[0]["text"].lower()
-    kb = msg.answers[1]["reply_markup"]
+    kb = msg.answers[0]["reply_markup"]
     assert kb is not None
     assert _find_button(kb, "fmt:pdf") is not None
     assert fsm.state is not None and fsm.state.state.endswith("awaiting_format")

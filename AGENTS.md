@@ -72,6 +72,7 @@ docker compose up --build
 - **完成的定义（DoD）**：pytest 全绿 + ruff 全绿 + 涉及 schema 时 `alembic upgrade head` 通过 + 涉及管道时 `scripts/e2e_archive.py` 输出 E2E-OK。
 - **进度同步**：完成/认领任务后**必须**更新 [docs/01-task-breakdown.md](docs/01-task-breakdown.md) 顶部状态表（含 commit 引用），这是多 Agent 之间的唯一进度事实源。
 - **决策记录**：引入新技术选型或改变既有决策时，在 docs/02 追加 ADR，而不是只在 commit message 里说明。
+- **部署到 VPS（生产同步）**：**任何功能/修复合入 main 后，必须执行 `scripts/deploy-to-vps.sh` 将代码同步到 VPS（/opt/archivebot）**。涉及数据库模型变更时，先在 VPS 执行 `alembic upgrade head`（见 [docs/07-vps-deployment.md](docs/07-vps-deployment.md) §8）。部署后确认四个容器 Up 且 `curl http://127.0.0.1:8080/healthz` 返回 `{"ok":true}`。VPS 部署细节、访问方式、运维命令见 [docs/07-vps-deployment.md](docs/07-vps-deployment.md)。
 
 ## 当前状态速览
 
