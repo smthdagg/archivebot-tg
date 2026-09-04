@@ -236,3 +236,26 @@ ssh -p 2222 root@<VPS-IPv4> \
 - 通用部署指南：[docs/04-deployment.md](04-deployment.md)
 - 架构设计：[docs/02-architecture.md](02-architecture.md)
 - 快速开始：[README.md](../README.md)
+---
+
+## 9. 运维组件（2026-09-04 起，与项目日志协同）
+
+### 9.1 代码部署契约
+- **修改代码后必须用 `scripts/deploy-to-vps.sh` 部署**（不再手动 scp 单文件）。
+- **`.env` 已加入排除清单**（`9ea90ce`）：VPS 部署目录的 `.env` 是生产配置（并发/密钥），
+  永不被代码部署覆盖；改配置直接在 VPS 编辑 `/opt/archivebot/.env` 后 `docker compose up -d`。
+- IPv6 连接：`VPS_HOST=<VPS-IPv6> VPS_PORT=22 ./scripts/deploy-to-vps.sh`
+
+### 9.2 定时运维（VPS cron，均已在 /root/ops 手册登记）
+| cron | 组件 | 职责 |
+|---|---|---|
+| 每日 03:10 | `ops-archivebot-backup.sh` | SQLite 在线一致性备份 + storage tar → `/root/ops/backups/archivebot/`（DB 14 份 / storage 7 份） |
+| 每 5 分钟 | `ops-archivebot-health.py` | 4 容器 + healthz + bot 轮询活动检查；异常/恢复经 tg-ytdlp bot 发 Telegram |
+| 每日 23:55 | `ops-daily-snapshot` | 服务/容器/端口/资源快照 |
+| 每周日 03:30 | `ops-weekly-cleanup` v2 | 与 ArchiveBot 解冲突（去 volume prune、tmp 保护、drop_caches 阈值、目录保护） |
+| 每日 18:29 | acme.sh | 订阅证书续期（80 端口保持空闲） |
+
+### 9.3 生产配置（VPS `.env` 独立）
+- `MAX_GLOBAL_CONCURRENCY=2` / `MAX_USER_CONCURRENCY=1`（1.9G 内存防并发 Chromium thrash）
+- swap：系统默认 + 2G `/swapfile2`（fstab 持久化）
+- 容器日志轮转：json-file `20m × 3`（compose `x-logging`，`dd9ef4c`）
