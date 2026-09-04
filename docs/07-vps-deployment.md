@@ -256,6 +256,6 @@ ssh -p 2222 root@<VPS-IPv4> \
 | 每日 18:29 | acme.sh | 订阅证书续期（80 端口保持空闲） |
 
 ### 9.3 生产配置（VPS `.env` 独立）
-- `MAX_GLOBAL_CONCURRENCY=2` / `MAX_USER_CONCURRENCY=1`（1.9G 内存防并发 Chromium thrash）
+- `MAX_GLOBAL_CONCURRENCY=3` / `MAX_USER_CONCURRENCY=2`（1.9G 内存；曾降至 2/1 引发“僵尸任务占槽→并发限流事故”，已加 `reap_stale_tasks` 自愈 + `CONCURRENCY_LIMIT` 友好错误，见 `aae3ff4`）
 - swap：系统默认 + 2G `/swapfile2`（fstab 持久化）
 - 容器日志轮转：json-file `20m × 3`（compose `x-logging`，`dd9ef4c`）
