@@ -1,13 +1,22 @@
+# 日志轮转：json-file 单文件最大 20M，保留 3 份，避免长期无上限增长
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "3"
+
 services:
   redis:
     image: redis:8-alpine
     restart: unless-stopped
+    logging: *logging
     volumes:
       - redis-data:/data
 
   bot:
     build: .
     restart: unless-stopped
+    logging: *logging
     env_file: .env
     environment:
       DATABASE_URL: sqlite:////app/data/archivebot.db
@@ -26,6 +35,7 @@ services:
   api:
     build: .
     restart: unless-stopped
+    logging: *logging
     env_file: .env
     environment:
       DATABASE_URL: sqlite:////app/data/archivebot.db
@@ -46,6 +56,7 @@ services:
   worker:
     build: .
     restart: unless-stopped
+    logging: *logging
     env_file: .env
     environment:
       DATABASE_URL: sqlite:////app/data/archivebot.db
