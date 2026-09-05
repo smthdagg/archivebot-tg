@@ -323,6 +323,10 @@ def _patch_webpage_cookies(cls=None) -> None:
             if valid:
                 await context.add_cookies(valid)
                 logger.info("caixin: injected %d cookies for %s", len(valid), url[:60])
+            # Readability 用 init script 注入：导航前生效、每次导航自动可用。
+            # （page.add_script_tag 在 Patchright 下会静默 no-op，导致
+            #   "Readability is not defined"）
+            await context.add_init_script(readability_src)
 
             page = await context.new_page()
 
@@ -370,8 +374,7 @@ def _patch_webpage_cookies(cls=None) -> None:
                     )
                     self._caixin_login_invalid = True
                     return None, []
-                # 每次导航都会重置页面脚本，Readability 需重新注入
-                await page.add_script_tag(content=readability_src)
+                # Readability 已由 context.add_init_script 注入（导航自动生效）
                 # 先提取媒体（图注供克隆清理匹配页内重复封面），再解析正文
                 media_n: list[dict] = []
                 try:
@@ -385,6 +388,8 @@ def _patch_webpage_cookies(cls=None) -> None:
             try:
                 url_current = url
                 seen_media: set[str] = set()
+                article: dict | None = None
+                media: list[dict] = []
                 article, media = await _render_current_page()
                 media = _dedupe_media(media, seen_media)
                 if article and article.get("content") and media:
