@@ -262,8 +262,8 @@ def _persist_session_cookies(cookie_list: list[dict]) -> None:
 
 
 async def _persist_session_cookies_async(context) -> None:
-    """async 包装：从 Playwright context 取最新 cookie 后回写。"""
-    _persist_session_cookies(await context.cookies() if False else context)
+    """async 版：从 Playwright context 拉最新 cookie 后回写。"""
+    _persist_session_cookies(await context.cookies())
 
 
 def _patch_webpage_cookies(cls=None) -> None:
