@@ -1,7 +1,7 @@
 # ArchiveBOT-TG VPS 实际部署记录（Doc 07）
 
-> 最后更新：2026-09-03
-> 本文件记录 **当前实际部署实例** 的具体信息（服务器、路径、容器、访问方式、运维命令）。
+> 最后更新：2026-09-05（公开版：服务器连接信息已占位符化，真实值见私有运维手册 `/root/ops/`）
+> 本文件记录部署实例的路径、容器、访问方式、运维命令。
 > 通用部署步骤见 [docs/04-deployment.md](04-deployment.md)。
 > **代码修改后部署到 VPS：见 §8（一键脚本 `scripts/deploy-to-vps.sh`）。**
 
@@ -11,9 +11,9 @@
 
 | 项目 | 值 |
 |---|---|
-| 服务器 | `henry.x.com`（香港 VPS，Debian 13，2 vCPU / 1.9G RAM / 15G 磁盘） |
+| 服务器 | `<VPS-HOSTNAME>`（香港 VPS，Debian 13，2 vCPU / 1.9G RAM / 15G 磁盘） |
 | IPv4 / IPv6 | `<VPS-IPv4>` / `<VPS-IPv6>` |
-| SSH | 端口 `22`（标准）/ `2222`（备用），root + 密钥登录 |
+| SSH | 端口 `<VPS-SSH-PORT>`（密钥登录），root + 密钥登录 |
 | 部署目录 | `/opt/archivebot/` |
 | 数据库方案 | **SQLite**（`data/archivebot.db`，单文件，随 compose bind mount） |
 | Web Admin | FastAPI `:8080`，**仅内网**（外网已被封锁，走 SSH 隧道访问） |
@@ -52,11 +52,11 @@ tar --exclude=".git" --exclude=".venv" --exclude=".pytest_cache" \
     -czf /tmp/archivebot-deploy.tar.gz .
 
 # 上传解压
-scp -P 2222 /tmp/archivebot-deploy.tar.gz root@<VPS-IPv4>:/opt/archivebot/
-ssh -p 2222 root@<VPS-IPv4> 'cd /opt/archivebot && tar xzf archivebot-deploy.tar.gz && rm -f archivebot-deploy.tar.gz'
+scp -P <VPS-SSH-PORT> /tmp/archivebot-deploy.tar.gz root@<VPS-IPv4>:/opt/archivebot/
+ssh -p <VPS-SSH-PORT> root@<VPS-IPv4> 'cd /opt/archivebot && tar xzf archivebot-deploy.tar.gz && rm -f archivebot-deploy.tar.gz'
 
 # 构建启动
-ssh -p 2222 root@<VPS-IPv4> 'cd /opt/archivebot && docker compose up -d --build'
+ssh -p <VPS-SSH-PORT> root@<VPS-IPv4> 'cd /opt/archivebot && docker compose up -d --build'
 ```
 
 > ⚠️ 上传包含 `.env`（含 Telegram token 等密钥），**勿外传仓库**；本地 `.env` 已含生产所需配置（token、ADMIN_IDS、Web Admin 密码等）。
@@ -75,7 +75,7 @@ ssh -p 2222 root@<VPS-IPv4> 'cd /opt/archivebot && docker compose up -d --build'
 
 ```bash
 # 建立隧道（2222 或 22 端口均可）
-ssh -L 8080:127.0.0.1:8080 -p 2222 -i ~/.ssh/your_key root@<VPS-IPv4>
+ssh -L 8080:127.0.0.1:8080 -p <VPS-SSH-PORT> -i ~/.ssh/your_key root@<VPS-IPv4>
 
 # 浏览器访问（保持隧道会话开启）
 open http://127.0.0.1:8080/admin
@@ -179,7 +179,7 @@ iptables -L DOCKER-USER -n      # 应看到 8080 DROP
 脚本步骤（5 步）：
 1. **本地质量门禁**：`pytest -m "not slow"` + `ruff check`（失败中止）
 2. **打包**：排除 `.git/.venv/缓存/storage/data` 等，生成 tar.gz
-3. **上传解压**：到 `$VPS_USER@$VPS_HOST:$VPS_DIR`（默认 `root@<VPS-IPv4>:2222 → /opt/archivebot`，可用环境变量 `VPS_HOST/VPS_PORT/VPS_DIR/SSH_KEY` 覆盖）
+3. **上传解压**：到 `$VPS_USER@$VPS_HOST:$VPS_DIR`（默认 `root@<VPS-IPv4>:<VPS-SSH-PORT> → /opt/archivebot`，可用环境变量 `VPS_HOST/VPS_PORT/VPS_DIR/SSH_KEY` 覆盖）
 4. **重建重启**：`docker compose build && docker compose up -d`
 5. **验证**：容器状态 + `curl /healthz`
 
@@ -198,14 +198,14 @@ tar --exclude=".git" --exclude=".venv" --exclude=".pytest_cache" \
     --exclude=".zcode" --exclude="__pycache__" --exclude="*.pyc" \
     --exclude="data" --exclude="storage" \
     -czf /tmp/ab.tgz .
-scp -P 2222 /tmp/ab.tgz root@<VPS-IPv4>:/opt/archivebot/
-ssh -p 2222 root@<VPS-IPv4> 'cd /opt/archivebot && tar xzf ab.tgz && rm -f ab.tgz'
+scp -P <VPS-SSH-PORT> /tmp/ab.tgz root@<VPS-IPv4>:/opt/archivebot/
+ssh -p <VPS-SSH-PORT> root@<VPS-IPv4> 'cd /opt/archivebot && tar xzf ab.tgz && rm -f ab.tgz'
 
 # 3) 重建重启
-ssh -p 2222 root@<VPS-IPv4> 'cd /opt/archivebot && docker compose up -d --build'
+ssh -p <VPS-SSH-PORT> root@<VPS-IPv4> 'cd /opt/archivebot && docker compose up -d --build'
 
 # 4) 验证
-ssh -p 2222 root@<VPS-IPv4> 'cd /opt/archivebot && docker compose ps && curl -s http://127.0.0.1:8080/healthz'
+ssh -p <VPS-SSH-PORT> root@<VPS-IPv4> 'cd /opt/archivebot && docker compose ps && curl -s http://127.0.0.1:8080/healthz'
 ```
 
 ### 8.3 数据库模型变更（涉及 Alembic）
@@ -216,7 +216,7 @@ ssh -p 2222 root@<VPS-IPv4> 'cd /opt/archivebot && docker compose ps && curl -s 
 # 本地生成迁移
 DATABASE_URL=sqlite:///data/archivebot.db .venv/bin/alembic revision --autogenerate -m "描述"
 # 部署代码后，在 VPS 执行迁移
-ssh -p 2222 root@<VPS-IPv4> \
+ssh -p <VPS-SSH-PORT> root@<VPS-IPv4> \
   'cd /opt/archivebot && docker compose run --rm --no-deps api sh -c "alembic upgrade head"'
 ```
 

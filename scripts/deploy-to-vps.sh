@@ -11,11 +11,14 @@
 set -euo pipefail
 
 # ---------- 可配置项（按需修改） ----------
-VPS_HOST="${VPS_HOST:-<VPS-IPv4>}"            # VPS IP（IPv4；IPv6 用 VPS_HOST=<VPS-IPv6> 覆盖）
-VPS_PORT="${VPS_PORT:-2222}"                      # SSH 端口
+# 私有连接参数从 scripts/deploy.env.local（gitignored）读取，不硬编码在仓库里
+ENV_LOCAL="$(cd "$(dirname "$0")" && pwd)/deploy.env.local"
+[ -f "$ENV_LOCAL" ] && source "$ENV_LOCAL"
+VPS_HOST="${VPS_HOST:?set VPS_HOST in scripts/deploy.env.local (gitignored) or env}"
+VPS_PORT="${VPS_PORT:-22}"                        # SSH 端口
 VPS_USER="${VPS_USER:-root}"                      # SSH 用户
 VPS_DIR="${VPS_DIR:-/opt/archivebot}"             # VPS 部署目录
-SSH_KEY="${SSH_KEY:-$HOME/Documents/sshkey.pem}"  # 默认用 VPS 密钥；可用 SSH_KEY 环境变量覆盖
+SSH_KEY="${SSH_KEY:-$HOME/Documents/sshkey.pem}"  # SSH 密钥路径；可用环境变量覆盖
 # 需要排除的本地目录/文件（打包时跳过）
 # ⚠️ .env 必须排除：VPS 部署目录的 .env 是生产配置（含并发/密钥），
 #    绝不随代码覆盖（否则 deploy 会丢掉 VPS 上的独立配置）。

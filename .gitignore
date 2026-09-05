@@ -31,3 +31,4 @@ logs/
 .worktrees/
 .serena/
 .zcode
+scripts/deploy.env.local

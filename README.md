@@ -1,5 +1,7 @@
 # ArchiveBOT-TG — Telegram 互联网文档归档与下载平台
 
+[English](README.en.md) | 简体中文
+
 简洁、稳健的多用户归档网关：发一条链接，收一次交付。
 
 **核心体验**：在 Telegram 私聊发任意文章/网页链接 → 识别平台 → 选 `PDF / Markdown / 长截图 / 全部` → 排队处理（可取消）→ 收到「标题 + 三行原文摘要 + 原文链接 + 文件」→ 历史可检索/重发/重新抓取/删除，本地已上传的文件自动清理。
@@ -14,11 +16,13 @@
 - **平台覆盖**
   - 文本：微信公众号、`x.com/twitter`、小红书、微博、知乎、Reddit、通用网页（`webpage_service`，Playwright + Readability）
   - 视频：YouTube / Bilibili / 抖音 / 快手 / Instagram（`yt-dlp`，`videos/video.mp4` 单文件交付）；TikTok 未适配
-  - 财新付费墙特化：Playwright 登录态注入、全页分页拼接、黄金图找回、提示注入蜜罐剔除
+  - 财新付费墙特化：反检测登录态注入、**长文分页拼接（?p1..?pN）**、黄金图找回与跨页去重、提示注入蜜罐剔除、`/m/` 手机链接归一化
   - 长截图：`PDF` 同模板的 `full_page` PNG（800px 宽、2x、超 40MB 转 JPEG）
 - **历史与检索**：分页历史、关键词/平台搜索、详情、**文件重发**（`telegram_file_id` 复用，不重复抓取）、**重新抓取**（新版本）、删除
 - **用户与设置**：默认输出格式、历史语言偏好、统计（今日/累计）、设置页
-- **Cookie Profile（登录类站点）**：`COOKIE_PROFILES` / `COOKIE_PROFILES_FILE` 配置 `wechat / xhs / reddit / zhihu / twitter`（`auth_token+ct0`）登录态，任务按需注入（仅用于用户自己已登录的可见内容，绝不绕过控制），`X` 已在 1.0 打通交付
+- **Cookie Profile（登录类站点）**：`COOKIE_PROFILES` / `COOKIE_PROFILES_FILE` 配置 `wechat / xhs / reddit / zhihu / twitter`（`auth_token+ct0`）登录态，任务按需注入（仅用于用户自己已登录的可见内容，绝不绕过控制）；`X` 交付已打通
+- **反检测渲染**：登录类平台（财新/微信）使用 **Patchright**（Playwright 反检测 fork，协议层抹除自动化特征），抓取会话自动回写 cookie profile（服务端刷新登录 token 时自动跟随，与浏览器同机制）；cookie 失效时明确报 `LOGIN_REQUIRED` 而非静默交付残缺内容
+- **任务自愈**：worker 崩溃/迁移遗留的卡死任务自动回收（`reap_stale_tasks`），并发限流错误友好化（`CONCURRENCY_LIMIT` 提示稍后再试）
 - **Web Admin**：FastAPI + Jinja2（`http://localhost:8080/admin`），Dashboard/Users/Tasks/Logs，Session 登录、`_twitter_auth_pair` 挂点与 CSRF/限流加固
 - **存储与清理**：任务目录 `tasks/<uuid>/{metadata,article.{md,pdf},cover,images/,videos/}`；软限 800MB / 硬限 1GB / 回落 200MB；已上传 Telegram 的本地文件可删，历史仅依赖 `file_id`
 - **安全**：SSRF 多层防护（`ssrf_guard` + 校验）、所有 callback 服务端校验所有权、RBAC（`ADMIN_IDS → SUPER_ADMIN`）、并发限流、Web Admin 限流与锁定
@@ -104,6 +108,18 @@ CI 在每次 `push` / `PR` 上执行 `ruff + pytest + alembic upgrade head`（`.
 - X 示例：从浏览器导出 `auth_token` 与 `ct0`（`.x.com` 与 `.twitter.com` 同时种）制作为名为 `x` 的 Profile，任务以 `cookie_profile="x"` 注入；Bot 对 `twitter` 平台若本地存在 `x/twitter` 会自动关联；
 - 详表与红线见 [docs/05-cookie-profile.md](docs/05-cookie-profile.md)。
 
+### 部署到自己的 VPS
+
+```bash
+# 私有连接参数写在 scripts/deploy.env.local（已 gitignore）：
+#   VPS_HOST=<你的VPS地址>
+#   VPS_PORT=<SSH端口>
+./scripts/deploy-to-vps.sh                 # 门禁 → 打包 → 上传 → 构建 → 重启 → 健康检查
+./scripts/deploy-to-vps.sh --skip-build    # 仅代码/模板改动时跳过镜像重建
+```
+
+脚本会排除 `.env` / `data` / `storage`（VPS 上的生产配置与数据不被覆盖）。
+
 ## 配置
 
 常用 `.env` 键（亦见 [.env.example](.env.example)）：
@@ -131,7 +147,17 @@ WEB_ADMIN_PASSWORD=change-me-strong-password
 - [docs/03-acceptance.md](docs/03-acceptance.md) / [docs/04-deployment.md](docs/04-deployment.md) / [docs/05-cookie-profile.md](docs/05-cookie-profile.md)
 - [docs/07-vps-deployment.md](docs/07-vps-deployment.md) — **当前 VPS 实际部署实例**（`/opt/archivebot`：容器组成、访问方式、运维命令、安全封锁、共存服务）
 
-## 1.0 发布说明
+## 版本
+
+### 1.0.1（最新）
+
+- **反检测渲染**：财新/微信切换 Patchright；财新会话自动回写，解决登录态被风控反复作废的问题
+- **X 平台交付打通**：Tweet → 归档产物桥接，`LOGIN_REQUIRED` 错误码一致
+- **并发自愈**：僵尸任务超时回收 + `CONCURRENCY_LIMIT` 友好提示
+- **版式**：PDF/长截图标题与作者行居中；信息块（作者/来源/时间/链接）移至文末
+- **运维**：`deploy-to-vps.sh` 部署契约（`.env` 不覆盖）、每日备份、健康监控（4 容器 + healthz）、日志轮转、清理脚本与业务数据解冲突
+
+### 1.0.0
 
 - 版本：`1.0.0`（`pyproject.toml` / `v1.0.0` tag）
 - 核心能力：全文归档（`PDF / Markdown / 长截图`）+ 队列交付 + 历史与 Web Admin + SSRF/RBAC/文件大小与并发防护
