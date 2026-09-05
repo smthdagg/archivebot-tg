@@ -295,6 +295,10 @@ def fetch_article(
     except ImportError as e:
         logger.error("ArchiveBOT dependency missing for %s: %s", platform, e)
         raise FetchError("ArchiveBOT backend unavailable", code=ErrorCode.UNKNOWN) from e
+    except FetchError:
+        # 已分类错误（如财新 cookie 失效 LOGIN_REQUIRED）直接透传，
+        # 不被下方 except Exception 重新归类为 UNKNOWN
+        raise
     except ssrf_guard.BlockedHostError as e:
         # 覆盖重定向跳转到内网的情况（入口只校验了首跳 URL）
         logger.error("SSRF guard blocked fetch for %s: %s", platform.value, e)

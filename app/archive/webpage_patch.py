@@ -314,17 +314,15 @@ def _patch_webpage_cookies(cls=None) -> None:
                     }"""
                 )
                 if not login_state.get("logged_in"):
-                    from app.archive.fetcher import FetchError
-                    from app.database.enums import ErrorCode
-
+                    # 不在此处抛错：vendor save_page 会捕获并回退到匿名静态提取，
+                    # 失效信号被吞。改为打标志，由 _save_page_patched 在拿到
+                    # 「试读版结果」后统一抛 LOGIN_REQUIRED（穿透 vendor 吞异常）。
                     logger.warning(
                         "caixin: login state invalid (box=%r), cookies expired?",
                         login_state.get("box"),
                     )
-                    raise FetchError(
-                        "Caixin cookies expired, please re-export cookie profile",
-                        code=ErrorCode.LOGIN_REQUIRED,
-                    )
+                    self._caixin_login_invalid = True
+                    return None, []
                 # 每次导航都会重置页面脚本，Readability 需重新注入
                 await page.add_script_tag(content=readability_src)
                 # 先提取媒体（图注供克隆清理匹配页内重复封面），再解析正文
@@ -390,7 +388,21 @@ def _patch_webpage_cookies(cls=None) -> None:
             return article
 
     def _save_page_patched(self, page_url: str) -> dict:
+        # 登录失效标志复位（本页检测在 _patched 内设置）
+        login_invalid = getattr(self, "_caixin_login_invalid", False)
+        self._caixin_login_invalid = False
         result = orig_save_page(self, page_url)
+        if login_invalid:
+            # vendor 把登录失效吞掉后回退到了匿名静态提取（试读版）——
+            # 在这里把 LOGIN_REQUIRED 抛出去，阻止静默交付残缺内容
+            from app.archive.fetcher import FetchError
+
+            from app.database.enums import ErrorCode
+
+            raise FetchError(
+                "Caixin cookies expired, please re-export cookie profile",
+                code=ErrorCode.LOGIN_REQUIRED,
+            )
         if not result:
             return result
         try:
