@@ -23,6 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY pyproject.toml ./
 RUN pip install --upgrade pip && \
     pip install aiogram fastapi uvicorn jinja2 python-multipart itsdangerous \
+                patchright \
                 pydantic pydantic-settings sqlalchemy alembic psycopg[binary] \
                 redis rq requests curl_cffi playwright tqdm \
                 beautifulsoup4 lxml markdownify \
@@ -30,7 +31,8 @@ RUN pip install --upgrade pip && \
                 httpx \
                 "camoufox[geoip]>=0.5" \
                 "yt-dlp>=2024.10.22" && \
-    playwright install --with-deps chromium
+    playwright install --with-deps chromium && \
+    patchright install chromium
 
 # Project sources (vendor/ArchiveBOT is mounted/checked-out by docker-compose)
 COPY app ./app

@@ -31,12 +31,9 @@ logger = logging.getLogger(__name__)
 
 
 def _load_caixin_cookies() -> list[dict]:
-    """从 COOKIE_PROFILES 的 caixin.caixin 读取，或直接读文件。"""
+    """读取 caixin 登录态 cookie。文件优先：渲染后的会话回写会更新文件，
+    文件永远是最新的会话状态；settings（lru_cache）仅作兜底。"""
     settings = get_settings()
-    profiles = settings.cookie_profiles
-    if "caixin" in profiles and "caixin" in profiles["caixin"]:
-        return profiles["caixin"]["caixin"]
-    # 直接读文件作为兜底（避免 lru_cache 旧值）
     path_str = settings.cookie_profiles_file
     if path_str:
         p = Path(path_str)
@@ -45,10 +42,13 @@ def _load_caixin_cookies() -> list[dict]:
                 data = json.loads(p.read_text(encoding="utf-8"))
                 if isinstance(data.get("caixin"), dict):
                     inner = data["caixin"].get("caixin", [])
-                    if isinstance(inner, list):
+                    if isinstance(inner, list) and inner:
                         return inner
             except Exception:
                 pass
+    profiles = settings.cookie_profiles
+    if "caixin" in profiles and "caixin" in profiles["caixin"]:
+        return profiles["caixin"]["caixin"]
     return []
 
 
@@ -212,6 +212,60 @@ def _merge_media(content_html: str, media: list[dict]) -> str:
     return str(soup)
 
 
+def _persist_session_cookies(cookie_list: list[dict]) -> None:
+    """把渲染会话的最新 cookie 回写到 cookie profile 文件。
+
+    财新会滚动刷新登录 token（用户浏览器无感自动接受新值），静态快照会
+    因此失效；回写让服务端 token 更新时本地自动跟随（与用户浏览器同机制）。
+    只合并 .caixin.com 域条目，不触碰其他站点配置。worker 单进程串行消费，
+    写文件无并发问题。
+    """
+    settings = get_settings()
+    path_str = settings.cookie_profiles_file
+    if not path_str:
+        return
+    p = Path(path_str)
+    if not p.exists():
+        return
+    latest = {
+        c["name"]: c
+        for c in cookie_list
+        if ".caixin.com" in (c.get("domain") or "")
+    }
+    if not latest:
+        return
+    data = json.loads(p.read_text(encoding="utf-8"))
+    inner = data.get("caixin", {}).get("caixin")
+    if not isinstance(inner, list) or not inner:
+        return
+    updated = 0
+    for c in inner:
+        new = latest.get(c.get("name"))
+        if new and str(c.get("value", "")) != str(new.get("value", "")):
+            c["value"] = str(new.get("value", ""))
+            if new.get("domain"):
+                c["domain"] = new["domain"]
+            updated += 1
+    known = {c.get("name") for c in inner}
+    for name, new in latest.items():
+        if name not in known:
+            inner.append({
+                "name": name,
+                "value": str(new.get("value", "")),
+                "domain": new.get("domain", ".caixin.com"),
+                "path": new.get("path", "/"),
+            })
+            updated += 1
+    if updated:
+        p.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        logger.info("caixin: persisted %d session cookie update(s)", updated)
+
+
+async def _persist_session_cookies_async(context) -> None:
+    """async 包装：从 Playwright context 取最新 cookie 后回写。"""
+    _persist_session_cookies(await context.cookies() if False else context)
+
+
 def _patch_webpage_cookies(cls=None) -> None:
     """让 WebpageService 在浏览器上下文创建时注入 caixin cookie。"""
     if cls is None:
@@ -235,24 +289,17 @@ def _patch_webpage_cookies(cls=None) -> None:
         if not cookies:
             return await orig_async_fetch(self, url)
 
-        # 重写版：带 cookie 注入的 Playwright 流程
+        # 重写版：带 cookie 注入的反检测浏览器流程（Patchright 优先）
 
-        from playwright.async_api import async_playwright
-
+        from app.archive.stealth import STEALTH_ARGS, get_async_playwright
         from vendor.ArchiveBOT.services.webpage_service import _READABILITY_JS  # noqa: PLC0415
 
         readability_src = _READABILITY_JS.read_text(encoding="utf-8")
 
+        async_playwright, engine = get_async_playwright()
+
         async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=True,
-                args=[
-                    "--no-sandbox",
-                    "--disable-dev-shm-usage",
-                    "--disable-gpu",
-                    "--disable-blink-features=AutomationControlled",
-                ],
-            )
+            browser = await p.chromium.launch(headless=True, args=STEALTH_ARGS)
             context = await browser.new_context(
                 user_agent=(
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -384,6 +431,15 @@ def _patch_webpage_cookies(cls=None) -> None:
                     article["content"] = "".join(parts)
                     logger.info("caixin: merged %d pages into content", len(parts))
             finally:
+                # 会话回写：财新会滚动刷新登录 token（浏览器无感自动更新），
+                # 静态快照因此失效。渲染成功且已登录时，把 context 里的最新
+                # cookie 写回 profile 文件，让服务端 token 更新时自动跟随
+                # （与用户浏览器同一机制）。
+                try:
+                    if article and article.get("content"):
+                        await _persist_session_cookies_async(context)
+                except Exception:  # noqa: BLE001 - 回写失败不影响本次结果
+                    logger.exception("caixin: session cookie persist failed")
                 await browser.close()
             return article
 

@@ -27,6 +27,8 @@ dependencies = [
     "curl_cffi>=0.7.0",
     "tqdm>=4.66",
     "playwright>=1.44",
+    # 反检测浏览器（Playwright 反检测 fork）：财新/微信等强风控站点
+    "patchright>=1.44",
     "beautifulsoup4>=4.12.0",
     "lxml>=4.9.0",
     "markdownify>=0.13",

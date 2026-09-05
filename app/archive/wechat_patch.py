@@ -30,7 +30,9 @@ def _patch_wechat_fetch_page_html(cls=None) -> None:
     if getattr(cls, "_patch_applied", False):
         return
 
-    from playwright.sync_api import sync_playwright
+    from app.archive.stealth import get_sync_playwright
+
+    sync_playwright, _engine = get_sync_playwright()
 
     _GENERIC_TITLES = getattr(cls, "_GENERIC_TITLES", ())
     _COOKIES_PATH = getattr(cls, "_COOKIES_PATH", "")
@@ -43,7 +45,7 @@ def _patch_wechat_fetch_page_html(cls=None) -> None:
         cookie 注入时机不对，微信会跳转验证码页。
         """
         with sync_playwright() as pw:
-            browser = pw.chromium.launch(headless=headless)
+            browser = pw.chromium.launch(headless=headless, args=["--no-sandbox", "--disable-dev-shm-usage"])
             context = browser.new_context(
                 user_agent=(
                     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
