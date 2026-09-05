@@ -323,10 +323,9 @@ def _patch_webpage_cookies(cls=None) -> None:
             if valid:
                 await context.add_cookies(valid)
                 logger.info("caixin: injected %d cookies for %s", len(valid), url[:60])
-            # Readability 用 init script 注入：导航前生效、每次导航自动可用。
-            # （page.add_script_tag 在 Patchright 下会静默 no-op，导致
-            #   "Readability is not defined"）
-            await context.add_init_script(readability_src)
+            # 注意：Patchright 的 evaluate 在隔离世界执行，主世界全局（如
+            # add_script_tag/add_init_script 定义的 Readability）不可见。
+            # 因此解析时把库源码与解析脚本拼进同一次 evaluate（见下）。
 
             page = await context.new_page()
 
@@ -382,7 +381,16 @@ def _patch_webpage_cookies(cls=None) -> None:
                 except Exception:  # noqa: BLE001 - 媒体提取失败不影响正文
                     logger.exception("caixin: media extract failed")
                 captions = [m.get("caption") or "" for m in media_n]
-                art = await page.evaluate(_PARSE_WITH_CLEANUP, captions)
+                # 库源码与解析函数拼进同一次 evaluate：Patchright 的 evaluate
+                # 运行在隔离世界，看不到页面/主世界注入的全局 Readability
+                parse_js = (
+                    "(function(captions) {\n"
+                    + readability_src
+                    + "\n;\nreturn ("
+                    + _PARSE_WITH_CLEANUP.strip()
+                    + ")(captions);\n})"
+                )
+                art = await page.evaluate(parse_js, captions)
                 return art, media_n
 
             try:
