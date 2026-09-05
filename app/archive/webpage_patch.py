@@ -396,7 +396,6 @@ def _patch_webpage_cookies(cls=None) -> None:
             # vendor 把登录失效吞掉后回退到了匿名静态提取（试读版）——
             # 在这里把 LOGIN_REQUIRED 抛出去，阻止静默交付残缺内容
             from app.archive.fetcher import FetchError
-
             from app.database.enums import ErrorCode
 
             raise FetchError(
