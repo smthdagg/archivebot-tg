@@ -315,7 +315,6 @@ def _patch_webpage_cookies(cls=None) -> None:
                 )
                 if not login_state.get("logged_in"):
                     from app.archive.fetcher import FetchError
-
                     from app.database.enums import ErrorCode
 
                     logger.warning(
