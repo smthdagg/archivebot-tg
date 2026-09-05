@@ -303,6 +303,29 @@ def _patch_webpage_cookies(cls=None) -> None:
                     }
                 """)
                 await page.wait_for_timeout(1000)
+                # 登录态检测：cookie 过期时页面显示「登录/注册」而非「退出」，
+                # 此时只能拿到试读版——明确报 LOGIN_REQUIRED 提示重新导出 cookie，
+                # 而不是静默交付残缺内容
+                login_state = await page.evaluate(
+                    """() => {
+                        const box = document.querySelector('#showLoginId');
+                        const t = box ? (box.innerText || '').trim() : '';
+                        return {logged_in: t.includes('退出'), box: t.slice(0, 20)};
+                    }"""
+                )
+                if not login_state.get("logged_in"):
+                    from app.archive.fetcher import FetchError
+
+                    from app.database.enums import ErrorCode
+
+                    logger.warning(
+                        "caixin: login state invalid (box=%r), cookies expired?",
+                        login_state.get("box"),
+                    )
+                    raise FetchError(
+                        "Caixin cookies expired, please re-export cookie profile",
+                        code=ErrorCode.LOGIN_REQUIRED,
+                    )
                 # 每次导航都会重置页面脚本，Readability 需重新注入
                 await page.add_script_tag(content=readability_src)
                 # 先提取媒体（图注供克隆清理匹配页内重复封面），再解析正文
