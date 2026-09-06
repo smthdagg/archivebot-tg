@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+import app.bot.handlers.admin as admin_mod
 import app.bot.handlers.archive as archive_mod
 import app.bot.handlers.history as history_mod
 import app.bot.handlers.menu as menu_mod
@@ -123,7 +124,7 @@ def db(db_factory):
 @pytest.fixture()
 def patch_session(db_factory, monkeypatch):
     """把各 handler 模块的 SessionLocal 指向测试专用 session factory。"""
-    for mod in (start_mod, archive_mod, history_mod, menu_mod):
+    for mod in (start_mod, archive_mod, history_mod, menu_mod, admin_mod):
         monkeypatch.setattr(mod, "SessionLocal", db_factory)
     return db_factory
 
@@ -670,3 +671,51 @@ def test_start_pending_application_reused_not_duplicated(db, db_factory, patch_s
 
     from app.database.models import UserApplication
     assert db.query(UserApplication).count() == 1
+
+
+def test_start_three_failures_blocks_and_rejects(db_factory, patch_session):
+    """连续 3 次暗号错误：踢出 + 写入黑名单，且不产生申请单。"""
+    import app.bot.handlers.start as start_mod
+    from app.database.models import SystemSetting, UserApplication
+    from app.database.services import get_registration_blocklist
+
+    s = db_factory()
+    s.add(SystemSetting(key="registration_code", value="letmein"))
+    s.commit()
+
+    msg = _FakeMessage(_FakeUser(4010, "brute", language_code="en"))
+    fsm = _FakeFSM()
+    _run(start_mod.on_start(msg, fsm))
+
+    for i in range(3):
+        wrong = _FakeMessage(_FakeUser(4010, "brute"), text=f"bad-{i}")
+        _run(start_mod.on_code_entered(wrong, fsm))
+
+    s2 = db_factory()
+    assert get_registration_blocklist(s2) == [4010]
+    assert s2.query(UserApplication).count() == 0  # 没有申请单产生
+    s2.rollback()
+    s2.close()
+
+
+def test_start_blocked_user_rejected(db_factory, patch_session):
+    """黑名单用户 /start：直接拒绝，不进申请流程。"""
+    import app.bot.handlers.start as start_mod
+    from app.database.models import SystemSetting, UserApplication
+    from app.database.services import add_registration_blocklist
+
+    s = db_factory()
+    s.add(SystemSetting(key="registration_code", value="letmein"))
+    s.commit()
+
+    add_registration_blocklist(s, 4011)
+    s.commit()
+
+    start2 = _FakeMessage(_FakeUser(4011, "blocked", language_code="en"))
+    _run(start_mod.on_start(start2, _FakeFSM()))
+    assert "blocked" in start2.answers[0]["text"].lower()
+
+    s2 = db_factory()
+    assert s2.query(UserApplication).count() == 0  # 不产生申请
+    s2.rollback()
+    s2.close()

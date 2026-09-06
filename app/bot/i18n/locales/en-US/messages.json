@@ -118,5 +118,10 @@
   "admin.regcode": "🔑 Registration Code",
   "admin.regcode.view": "🔑 Registration code: {code}\n\nNew users must enter this code after /start to apply.\nEmpty = open registration.\n\n[✏️ Edit]",
   "admin.regcode.edit": "✏️ Send the new registration code:\nSend /cancel to keep current.",
-  "admin.regcode.saved": "✅ Registration code updated to: {code}"
+  "admin.regcode.saved": "✅ Registration code updated to: {code}",
+  "user.too_many_attempts": "🚫 Too many wrong attempts. You have been blocked.\nContact the admin if needed.",
+  "user.blocked": "🚫 You have been blocked from applying.\nContact the admin if needed.",
+  "user.code_attempts_left": "Attempts left: {remaining}",
+  "admin.blocklist": "🚫 Blocklist",
+  "admin.blocklist.remove": "Remove {tid}"
 }

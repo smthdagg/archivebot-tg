@@ -18,7 +18,12 @@ from app.bot.keyboards import main_menu
 from app.database.database import SessionLocal
 from app.database.enums import UserStatus
 from app.database.models import UserApplication
-from app.database.services import audit, get_registration_code
+from app.database.services import (
+    add_registration_blocklist,
+    audit,
+    get_registration_blocklist,
+    get_registration_code,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +49,11 @@ async def on_start(message: types.Message, state: FSMContext) -> None:
 
         if is_new:
             audit(db, action="USER_REGISTERED", operator_user_id=user.id, target_type="user", target_id=user.id)
+
+        # 暗号爆破黑名单：直接拒绝，不进入申请流程
+        if user.status != UserStatus.ACTIVE and message.from_user.id in get_registration_blocklist(db):
+            await message.answer(t(lang, "user.blocked"))
+            return
 
         if user.status == UserStatus.PENDING:
             await _handle_pending(message, state, db, user, lang)
@@ -96,7 +106,21 @@ async def on_code_entered(message: types.Message, state: FSMContext) -> None:
     db = SessionLocal()
     expected = get_registration_code(db).strip()
     if (message.text or "").strip() != expected:
-        await message.answer(t(lang, "user.code_invalid"))
+        failures = int(data.get("code_failures", 0)) + 1
+        if failures >= 3:
+            # 爆破防护：连续 3 次输错，踢出并拉黑（管理员可在 🔑 页面解除）
+            add_registration_blocklist(db, message.from_user.id)
+            db.commit()
+            await state.clear()
+            audit(db, action="USER_BLOCKED", operator_user_id=message.from_user.id,
+                  target_type="user", target_id=message.from_user.id,
+                  details={"reason": "registration code brute force"})
+            await message.answer(t(lang, "user.too_many_attempts"))
+            return
+        await state.update_data(code_failures=failures)
+        remaining = 3 - failures
+        left = t(lang, "user.code_attempts_left", remaining=remaining)
+        await message.answer(t(lang, "user.code_invalid") + "\n⚠️ " + left)
         return
 
     try:

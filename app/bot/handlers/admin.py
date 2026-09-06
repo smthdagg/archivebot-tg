@@ -19,9 +19,11 @@ from app.database.enums import ApplicationStatus, AuditAction, UserStatus
 from app.database.models import AuditLog, User, UserApplication
 from app.database.services import (
     audit,
+    get_registration_blocklist,
     get_registration_code,
     get_user_by_telegram_id,
     now_utc,
+    remove_registration_blocklist,
     set_setting,
 )
 from app.storage.manager import get_storage
@@ -73,14 +75,69 @@ async def regcode_view(callback: types.CallbackQuery, state: FSMContext) -> None
         lang = user_language(admin)
         code = get_registration_code(db) or "—（开放申请）"
         await state.clear()
+        blocked = get_registration_blocklist(db)
+        lines = [t(lang, "admin.regcode.view", code=code)]
+        kb = [[InlineKeyboardButton(text="✏️", callback_data="adm:regcode:edit")]]
+        if blocked:
+            lines.append("")
+            lines.append(t(lang, "admin.blocklist") + f" ({len(blocked)}):")
+            for tid in blocked:
+                lines.append(f"• {tid}")
+                kb.append([InlineKeyboardButton(
+                    text=t(lang, "admin.blocklist.remove", tid=tid),
+                    callback_data=f"adm:blocklist:remove:{tid}")])
+        kb.append([InlineKeyboardButton(text=t(lang, "action.back"), callback_data="menu:admin")])
         await callback.message.edit_text(
-            t(lang, "admin.regcode.view", code=code),
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text=t(lang, "admin.regcode.edit").split("：")[0].split(":")[0][:16] or "✏️",
-                                      callback_data="adm:regcode:edit")],
-                [InlineKeyboardButton(text=t(lang, "action.back"), callback_data="menu:admin")],
-            ]),
+            "\n".join(lines),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=kb),
         )
+    finally:
+        db.close()
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("adm:blocklist:remove:"))
+async def blocklist_remove(callback: types.CallbackQuery) -> None:
+    db = SessionLocal()
+    try:
+        admin = get_user_by_telegram_id(db, callback.from_user.id)
+        if admin is None or not is_admin_role(admin.role):
+            await callback.answer("denied", show_alert=True)
+            return
+        tid = int(callback.data.rsplit(":", 1)[1])
+        remove_registration_blocklist(db, tid)
+        db.commit()
+        audit(db, action="SETTING_CHANGED", operator_user_id=admin.id,
+              target_type="setting", target_id="registration_blocklist",
+              details={"removed": tid})
+        db.commit()
+    finally:
+        db.close()
+    await regcode_view_refresh(callback)
+
+
+async def regcode_view_refresh(callback: types.CallbackQuery) -> None:
+    # 复用查看逻辑（重建键盘）
+    from app.database.services import get_user_by_telegram_id as _g
+
+    db = SessionLocal()
+    try:
+        admin = _g(db, callback.from_user.id)
+        lang = user_language(admin)
+        code = get_registration_code(db) or "—（开放申请）"
+        blocked = get_registration_blocklist(db)
+        lines = [t(lang, "admin.regcode.view", code=code)]
+        kb = [[InlineKeyboardButton(text="✏️", callback_data="adm:regcode:edit")]]
+        if blocked:
+            lines.append("")
+            lines.append(t(lang, "admin.blocklist") + f" ({len(blocked)}):")
+            for tid in blocked:
+                lines.append(f"• {tid}")
+                kb.append([InlineKeyboardButton(
+                    text=t(lang, "admin.blocklist.remove", tid=tid),
+                    callback_data=f"adm:blocklist:remove:{tid}")])
+        kb.append([InlineKeyboardButton(text=t(lang, "action.back"), callback_data="menu:admin")])
+        await callback.message.edit_text("\n".join(lines), reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
     finally:
         db.close()
     await callback.answer()
@@ -225,6 +282,8 @@ async def review_application(callback: types.CallbackQuery) -> None:
         if decision == "approve" and user is not None:
             user.status = UserStatus.ACTIVE
             user.approved_at = now_utc()
+            # 批准即解除注册黑名单（如有），闭环
+            remove_registration_blocklist(db, user.telegram_id)
             audit(db, action=AuditAction.USER_APPROVE, operator_user_id=admin.id,
                   target_type="user", target_id=user.id)
         else:

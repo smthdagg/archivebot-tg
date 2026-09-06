@@ -108,3 +108,45 @@ def get_registration_code(db: Session) -> str:
     if db_val:
         return db_val.strip()
     return (get_settings().registration_code or "").strip()
+
+
+# ---------------------------------------------------------------------------
+# 注册黑名单（暗号爆破防护；存 system_settings 的 JSON 数组）
+# ---------------------------------------------------------------------------
+
+BLOCKLIST_KEY = "registration_blocklist"
+
+
+def get_registration_blocklist(db: Session) -> list[int]:
+    import json as _json
+
+    raw = get_setting(db, BLOCKLIST_KEY, "[]")
+    try:
+        return [int(x) for x in _json.loads(raw)]
+    except Exception:
+        return []
+
+
+def add_registration_blocklist(db: Session, telegram_id: int) -> None:
+    import json as _json
+
+    blocked = get_registration_blocklist(db)
+    if telegram_id in blocked:
+        return
+    blocked.append(telegram_id)
+    row = db.get(SystemSetting, BLOCKLIST_KEY)
+    if row is None:
+        row = SystemSetting(key=BLOCKLIST_KEY)
+    row.value = _json.dumps(blocked)
+    db.add(row)
+
+
+def remove_registration_blocklist(db: Session, telegram_id: int) -> None:
+    import json as _json
+
+    blocked = get_registration_blocklist(db)
+    if telegram_id in blocked:
+        row = db.get(SystemSetting, BLOCKLIST_KEY)
+        if row is not None:
+            row.value = _json.dumps([x for x in blocked if x != telegram_id])
+            db.add(row)
