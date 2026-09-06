@@ -143,9 +143,15 @@ def fetch_zhihu_question(url: str, qid: str, cookies: list[dict[str, Any]], task
                 page.wait_for_timeout(1100)
             page.wait_for_timeout(800)
             data = page.evaluate(_EXTRACT_JS) or {}
-            # 点击第一个回答的评论入口（评论区默认折叠；滚动就位后再点）
+            # 点击第一个回答的评论入口（评论区默认折叠；按钮可能仍在懒加载，
+            # 轮询等待出现 + 滚动就位后再点）
             try:
-                first_btn = page.query_selector('.AnswerItem button:has-text("条评论")')
+                first_btn = None
+                for _ in range(8):
+                    first_btn = page.query_selector('.AnswerItem button:has-text("条评论")')
+                    if first_btn:
+                        break
+                    page.wait_for_timeout(800)
                 if first_btn:
                     first_btn.scroll_into_view_if_needed(timeout=4000)
                     first_btn.click(timeout=3000)
