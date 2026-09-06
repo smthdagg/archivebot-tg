@@ -87,3 +87,18 @@ def test_download_images_localizes(monkeypatch, tmp_path):
     # data-original 优先（高清大图）
     assert calls == ["https://pic1.zhimg.com/a.jpg", "https://pic2.zhimg.com/b_big.png"]
     assert (tmp_path / "q1_01.jpg").read_bytes() == b"\xff\xd8\xff\xe0fake-jpeg"
+
+
+def test_text_fallback_md_keeps_sections():
+    html = (
+        "<h1>问题</h1>"
+        '<section><h2>半佛仙人 的回答</h2><p style="x">587 人赞同了该回答</p>'
+        "<p>正文第一句。</p></section>"
+        '<section><h2>答主 2 的回答</h2><p>第二答正文。</p></section>'
+    )
+    md = zq._text_fallback_md(html, "问题")
+    assert md.startswith("# 问题")
+    assert "## 半佛仙人 的回答" in md
+    assert "> 587 人赞同了该回答" in md
+    assert "正文第一句。" in md
+    assert "第二答正文。" in md

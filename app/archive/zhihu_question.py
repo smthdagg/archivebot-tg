@@ -208,7 +208,12 @@ def fetch_zhihu_question(url: str, qid: str, cookies: list[dict[str, Any]], task
     )
 
     # 统一产物布局（fetcher._from_save_result 读回，交付管道零改动）
-    md_text = html_to_markdown(combined_html)
+    # 正文懒加载未完全展开时 HTML 可能残缺，markdownify 偶发崩溃 → 降级纯文本版
+    try:
+        md_text = html_to_markdown(combined_html)
+    except Exception as e:  # noqa: BLE001 - 转换失败不阻塞归档
+        logger.warning("zhihu question md conversion failed, fallback to text: %s", e)
+        md_text = _text_fallback_md(combined_html, title or "知乎问题")
     if comment_items:
         _, comments_md = zhc.render_comment_blocks(comment_items)
         if comments_md and "评论区" not in md_text:
@@ -253,6 +258,23 @@ def _strip_html(html_text: str) -> str:
     from bs4 import BeautifulSoup
 
     return BeautifulSoup(html_text, "html.parser").get_text("\n")
+
+
+def _text_fallback_md(combined_html: str, title: str) -> str:
+    """html→markdown 转换失败时的纯文本降级（回答分节保留）。"""
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(combined_html, "html.parser")
+    lines = [f"# {title}"]
+    for section in soup.find_all("section"):
+        h = section.find("h2")
+        if h:
+            lines.append(f"\n## {h.get_text(strip=True)}")
+        for meta in section.find_all("p", attrs={"style": True}):
+            if "人赞同" in (meta.get_text() or ""):
+                lines.append(f"> {meta.get_text(strip=True)}")
+        lines.append(section.get_text("\n").strip())
+    return "\n".join(line for line in lines if line)
 
 
 def _clean_answer_body(raw: str) -> str:
