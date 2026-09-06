@@ -158,7 +158,7 @@ _DISPATCH: dict[Platform, tuple[str, str, str]] = {
     Platform.TWITTER: ("services.twitter_service", "TwitterService", "get_tweet"),
     Platform.XHS: ("services.xhs_service", "XHSService", "save_post"),
     Platform.WEIBO: ("services.weibo_service", "WeiboService", "save_post"),
-    Platform.ZHIHU: ("services.zhihu_service", "ZhihuService", "save_article"),
+    Platform.ZHIHU: ("services.zhihu_service", "ZhihuService", "save_post"),
 }
 
 
