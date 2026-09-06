@@ -240,6 +240,28 @@ def fetch_article(
             raise FetchError(str(e), code=ErrorCode.UNKNOWN) from e
 
     module_name, class_name, method_name = entry
+
+    # 知乎纯问题页：vendor 只支持 answer/article/pin，question 走本仓库 wrapper
+    # （问题 + 高赞回答合集归档；无 cookie 时与 vendor 一致要求登录态）
+    if platform == Platform.ZHIHU:
+        from app.archive.zhihu_question import classify_zhihu_question, fetch_zhihu_question
+
+        qid = classify_zhihu_question(url)
+        if qid is not None:
+            try:
+                if cookies is None:
+                    raise FetchError(
+                        "Zhihu cookies are not configured. "
+                        "Please use a zhihu cookie profile for question pages.",
+                        code=ErrorCode.LOGIN_REQUIRED,
+                    )
+                return fetch_zhihu_question(url, qid, cookies, task_dir)
+            except FetchError:
+                raise
+            except Exception as e:  # noqa: BLE001 - 页面结构/网络错误统一归类
+                logger.exception("zhihu question archive failed for %s: %s", url, e)
+                raise FetchError(str(e), code=ErrorCode.UNKNOWN) from e
+
     page_html = ""
     try:
         if platform == Platform.WECHAT:

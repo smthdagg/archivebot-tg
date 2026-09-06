@@ -211,6 +211,18 @@ def _capture_comments_via_page(
 # 渲染
 # ---------------------------------------------------------------------------
 
+def render_comment_blocks(comments: list[dict[str, Any]]) -> tuple[str, str]:
+    """把 comment_v5 原始 data 条目渲染为 (html, markdown) 交付片段。
+
+    供 zhihu_question 等复用（Playwright 拦截到的评论数据，跨签名校验）。
+    无有效评论时返回 ("", "")。
+    """
+    rendered = [r for r in (_render_root(c) for c in comments) if r]
+    if not rendered:
+        return "", ""
+    return _build_html(rendered, len(rendered)), _build_markdown(rendered)
+
+
 def _clean_comment_html(raw: str) -> str:
     """清理评论富文本：剥脚本/链接，白名单标签保留，图片降级为 [图片]。
 
