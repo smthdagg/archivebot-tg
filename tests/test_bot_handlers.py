@@ -100,13 +100,6 @@ class _FakeFSM:
     async def get_data(self):
         return dict(self.data)
 
-    async def set_state(self, state):
-        self.state = state
-
-    async def clear(self):
-        self.data = {}
-        self.state = None
-
 
 # ---------------------------------------------------------------------------
 # fixtures
