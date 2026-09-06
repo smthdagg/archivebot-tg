@@ -107,8 +107,8 @@ async def on_format_selected(callback: types.CallbackQuery, state: FSMContext) -
                 _profs = {}
                 _pf = _GS().cookie_profiles_file
                 if _pf:
-                    from pathlib import Path as _Path
                     import json as _json
+                    from pathlib import Path as _Path
                     _pp = _Path(_pf)
                     if not _pp.is_absolute():
                         _pp = _Path("/app") / _pp
