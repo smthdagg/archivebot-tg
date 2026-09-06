@@ -142,11 +142,12 @@ def fetch_zhihu_question(url: str, qid: str, cookies: list[dict[str, Any]], task
                     break
                 page.wait_for_timeout(1100)
             page.wait_for_timeout(800)
-            data = page.evaluate(_EXTRACT_JS)
-            # 点击第一个回答的评论入口（评论区默认折叠）
+            data = page.evaluate(_EXTRACT_JS) or {}
+            # 点击第一个回答的评论入口（评论区默认折叠；滚动就位后再点）
             try:
                 first_btn = page.query_selector('.AnswerItem button:has-text("条评论")')
                 if first_btn:
+                    first_btn.scroll_into_view_if_needed(timeout=4000)
                     first_btn.click(timeout=3000)
                     page.wait_for_timeout(2000)
             except Exception:  # noqa: BLE001 - 评论区是增强特性

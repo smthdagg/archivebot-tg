@@ -120,19 +120,21 @@ def run_archive(
     # 3b. 知乎评论区增强：正文后追加评论区（仅带登录 cookie 的任务；任何失败
     # 降级跳过，不影响正文归档）。评论 HTML 并入渲染源 → PDF/长截图自动带上；
     # Markdown 版在第 4 步定稿后追加。
+    # 纯问题页由 zhihu_question 自行归档评论区，此处跳过避免重复调用。
     comments = None
     if platform == Platform.ZHIHU:
         from app.archive import zhihu_comments as zhc
 
-        try:
-            cookies = _profile_cookies(cookie_profile, Platform.ZHIHU)
-            comments = zhc.fetch_zhihu_comments(url, cookies)
-        except Exception:  # noqa: BLE001 - 评论区是增强特性，失败不阻塞任务
-            logger.exception("zhihu comments skipped due to error")
-            comments = None
-        if comments and comments.ok:
-            cleaned_html = f"{cleaned_html}\n{comments.html}"
-            logger.info("zhihu comments appended to render source: total=%d", comments.total)
+        if zhc.classify_zhihu_url(url) is not None:
+            try:
+                cookies = _profile_cookies(cookie_profile, Platform.ZHIHU)
+                comments = zhc.fetch_zhihu_comments(url, cookies)
+            except Exception:  # noqa: BLE001 - 评论区是增强特性，失败不阻塞任务
+                logger.exception("zhihu comments skipped due to error")
+                comments = None
+            if comments and comments.ok:
+                cleaned_html = f"{cleaned_html}\n{comments.html}"
+                logger.info("zhihu comments appended to render source: total=%d", comments.total)
 
     # 存档文件名：标题_YYYY-MM-DD_HHMM.ext（仅正文与图片，命名跟标题走）
     # archive_time 已在函数入口确定（默认 now UTC），用于本次全部产物的统一时间戳
