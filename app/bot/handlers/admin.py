@@ -64,17 +64,13 @@ async def admin_center(callback: types.CallbackQuery) -> None:
 # ---------------------------------------------------------------------------
 
 
-@router.callback_query(F.data == "adm:regcode")
-async def regcode_view(callback: types.CallbackQuery, state: FSMContext) -> None:
+async def _render_regcode_view(callback: types.CallbackQuery) -> None:
+    """渲染 🔑 申请暗号页面（含黑名单列表与移除按钮）。"""
     db = SessionLocal()
     try:
         admin = get_user_by_telegram_id(db, callback.from_user.id)
-        if admin is None or not is_admin_role(admin.role):
-            await callback.answer(t(user_language(admin), "user.denied"), show_alert=True)
-            return
         lang = user_language(admin)
         code = get_registration_code(db) or "—（开放申请）"
-        await state.clear()
         blocked = get_registration_blocklist(db)
         lines = [t(lang, "admin.regcode.view", code=code)]
         kb = [[InlineKeyboardButton(text="✏️", callback_data="adm:regcode:edit")]]
@@ -88,12 +84,26 @@ async def regcode_view(callback: types.CallbackQuery, state: FSMContext) -> None
                     callback_data=f"adm:blocklist:remove:{tid}")])
         kb.append([InlineKeyboardButton(text=t(lang, "action.back"), callback_data="menu:admin")])
         await callback.message.edit_text(
-            "\n".join(lines),
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=kb),
+            "\n".join(lines), reply_markup=InlineKeyboardMarkup(inline_keyboard=kb)
         )
     finally:
         db.close()
     await callback.answer()
+
+
+@router.callback_query(F.data == "adm:regcode")
+async def regcode_view(callback: types.CallbackQuery, state: FSMContext) -> None:
+    db = SessionLocal()
+    try:
+        admin = get_user_by_telegram_id(db, callback.from_user.id)
+        if admin is None or not is_admin_role(admin.role):
+            await callback.answer(t(user_language(admin), "user.denied"), show_alert=True)
+            return
+        await state.clear()
+        await _render_regcode_view(callback)
+    finally:
+        db.close()
+
 
 
 @router.callback_query(F.data.startswith("adm:blocklist:remove:"))
@@ -113,34 +123,7 @@ async def blocklist_remove(callback: types.CallbackQuery) -> None:
         db.commit()
     finally:
         db.close()
-    await regcode_view_refresh(callback)
-
-
-async def regcode_view_refresh(callback: types.CallbackQuery) -> None:
-    # 复用查看逻辑（重建键盘）
-    from app.database.services import get_user_by_telegram_id as _g
-
-    db = SessionLocal()
-    try:
-        admin = _g(db, callback.from_user.id)
-        lang = user_language(admin)
-        code = get_registration_code(db) or "—（开放申请）"
-        blocked = get_registration_blocklist(db)
-        lines = [t(lang, "admin.regcode.view", code=code)]
-        kb = [[InlineKeyboardButton(text="✏️", callback_data="adm:regcode:edit")]]
-        if blocked:
-            lines.append("")
-            lines.append(t(lang, "admin.blocklist") + f" ({len(blocked)}):")
-            for tid in blocked:
-                lines.append(f"• {tid}")
-                kb.append([InlineKeyboardButton(
-                    text=t(lang, "admin.blocklist.remove", tid=tid),
-                    callback_data=f"adm:blocklist:remove:{tid}")])
-        kb.append([InlineKeyboardButton(text=t(lang, "action.back"), callback_data="menu:admin")])
-        await callback.message.edit_text("\n".join(lines), reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
-    finally:
-        db.close()
-    await callback.answer()
+    await _render_regcode_view(callback)
 
 
 @router.callback_query(F.data == "adm:regcode:edit")

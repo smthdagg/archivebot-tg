@@ -124,9 +124,6 @@ def run_archive(
         # 再把 img src 改写为 file:// 绝对路径（Playwright 渲染需要，规格 §11）
         if _wechat_md_raw and result.markdown_path:
             md_path = task_dir / f"{_basename}.md"
-            # 兼容：历史固定名 article.md 的产物已在 Markdown 阶段写出
-            if not md_path.exists() and (task_dir / "article.md").exists():
-                md_path = task_dir / "article.md"
             pdf_source_md = (
                 md_path.read_text(encoding="utf-8")
                 if md_path.exists()

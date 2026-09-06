@@ -9,6 +9,7 @@
 import logging
 import re
 from datetime import datetime, timezone
+from html import escape as _escape
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -59,15 +60,6 @@ _TEMPLATE = """<!DOCTYPE html>
 </body>
 </html>
 """
-
-
-def _escape(text: str) -> str:
-    return (
-        text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-    )
 
 
 def _body_has_title_heading(content_html: str, title: str) -> bool:

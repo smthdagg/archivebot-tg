@@ -261,11 +261,6 @@ def _persist_session_cookies(cookie_list: list[dict]) -> None:
         logger.info("caixin: persisted %d session cookie update(s)", updated)
 
 
-async def _persist_session_cookies_async(context) -> None:
-    """async 版：从 Playwright context 拉最新 cookie 后回写。"""
-    _persist_session_cookies(await context.cookies())
-
-
 def _patch_webpage_cookies(cls=None) -> None:
     """让 WebpageService 在浏览器上下文创建时注入 caixin cookie。"""
     if cls is None:
@@ -450,7 +445,7 @@ def _patch_webpage_cookies(cls=None) -> None:
                 # （与用户浏览器同一机制）。
                 try:
                     if article and article.get("content"):
-                        await _persist_session_cookies_async(context)
+                        await _persist_session_cookies(await context.cookies())
                 except Exception:  # noqa: BLE001 - 回写失败不影响本次结果
                     logger.exception("caixin: session cookie persist failed")
                 await browser.close()
