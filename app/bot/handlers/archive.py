@@ -115,10 +115,13 @@ async def on_format_selected(callback: types.CallbackQuery, state: FSMContext) -
                                     break
                         if auto_profile:
                             break
-                elif platform == Platform.TWITTER.value:
-                    # X 登录墙：若存在名为 "x" 的 twitter profile，自动关联
-                    if "x" in _profs and "twitter" in _profs.get("x", {}):
-                        auto_profile = "x"
+                elif platform.value in ("twitter", "zhihu", "xhs", "reddit", "wechat"):
+                    # 登录类平台：若某 profile 配置了该平台的 cookie，自动关联
+                    # （twitter→"x"、zhihu→"zhihu"、wechat→"wechat"、caixin 走上面 WEB 分支）
+                    for _k, _platforms in _profs.items():
+                        if _platforms.get(platform.value):
+                            auto_profile = _k
+                            break
             except Exception:
                 pass
             task = task_manager.create_task(
