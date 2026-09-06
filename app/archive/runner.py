@@ -117,6 +117,23 @@ def run_archive(
             cleaned_html = paras + gallery
             logger.info("render source built from text+images (no html/md from vendor)")
 
+    # 3b. 知乎评论区增强：正文后追加评论区（仅带登录 cookie 的任务；任何失败
+    # 降级跳过，不影响正文归档）。评论 HTML 并入渲染源 → PDF/长截图自动带上；
+    # Markdown 版在第 4 步定稿后追加。
+    comments = None
+    if platform == Platform.ZHIHU:
+        from app.archive import zhihu_comments as zhc
+
+        try:
+            cookies = _profile_cookies(cookie_profile, Platform.ZHIHU)
+            comments = zhc.fetch_zhihu_comments(url, cookies)
+        except Exception:  # noqa: BLE001 - 评论区是增强特性，失败不阻塞任务
+            logger.exception("zhihu comments skipped due to error")
+            comments = None
+        if comments and comments.ok:
+            cleaned_html = f"{cleaned_html}\n{comments.html}"
+            logger.info("zhihu comments appended to render source: total=%d", comments.total)
+
     # 存档文件名：标题_YYYY-MM-DD_HHMM.ext（仅正文与图片，命名跟标题走）
     # archive_time 已在函数入口确定（默认 now UTC），用于本次全部产物的统一时间戳
     from app.archive.naming import archive_basename
@@ -141,6 +158,9 @@ def run_archive(
             # vendor 下载图片后 content.html 里只剩本地路径，原始 URL 在 data-original-src
             result.image_urls = _extract_original_image_urls(article.html)
         result.markdown_path = markdown_mod.build_markdown_file(task_dir, md_content, basename=_basename)
+        # 知乎评论的 Markdown 版追加到交付文件末尾（评论与正文分节）
+        if comments and comments.ok and result.markdown_path:
+            _append_comments_md(result.markdown_path, comments.markdown)
 
     # 5. PDF
     if OutputType.PDF in output_types:
@@ -279,6 +299,30 @@ def _html_to_text(html: str) -> str:
     from bs4 import BeautifulSoup
 
     return BeautifulSoup(html, "html.parser").get_text(separator="\n")
+
+
+def _profile_cookies(cookie_profile: str | None, platform: Platform):
+    """读取 cookie profile 的 Playwright 同构 cookie 列表（无 profile → None）。
+
+    与 fetcher 同一来源（profile 文件热读），保证评论 API 与正文抓取共用登录态。
+    """
+    if not cookie_profile:
+        return None
+    from app.archive.cookie_profile import load_profiles, resolve_cookies
+
+    return resolve_cookies(load_profiles(), cookie_profile, platform)
+
+
+def _append_comments_md(md_path: Path, comments_md: str) -> None:
+    """把评论 Markdown 追加到交付 .md 文件（正文与评论分节）。
+
+    仅当 md 源自 vendor 的 content.md（评论未随 HTML 转换进入 md）时调用；
+    此处再按标题去重兜底，防止 md 由含评论的 cleaned_html 转换时重复追加。
+    """
+    existing = md_path.read_text(encoding="utf-8")
+    if re.search(r"^#{1,3}\s*评论区", existing, re.MULTILINE):
+        return
+    md_path.write_text(f"{existing.rstrip()}\n\n---\n\n{comments_md.rstrip()}\n", encoding="utf-8")
 
 
 def _write_metadata(result: ArchiveResult, archive_time: datetime) -> None:
