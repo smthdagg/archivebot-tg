@@ -59,16 +59,29 @@ def clean_html(html: str) -> str:
     ):
         element.decompose()
 
-    for element in soup.find_all(True):
-        class_str = " ".join(element.get("class", [])).lower()
-        id_str = (element.get("id") or "").lower()
-        if any(k in class_str or k in id_str for k in _BLOCKLIST_KEYWORDS):
-            element.decompose()
+    # blocklist 收集后统一删除（不能在 find_all 遍历中 decompose：
+    # bs4 的 decompose 会把该节点及后代的 attrs 置 None，继续遍历同一
+    # 快照会 AttributeError: 'NoneType' object has no attribute 'get'）
+    victims = [
+        element
+        for element in soup.find_all(True)
+        if any(
+            k in " ".join(element.get("class", []) or []).lower()
+            or k in (element.get("id") or "").lower()
+            for k in _BLOCKLIST_KEYWORDS
+        )
+    ]
+    for element in victims:
+        element.decompose()
 
-    # 移除空块
-    for element in soup.find_all(["div", "section", "p", "span"]):
-        if not element.get_text(strip=True) and not element.find("img"):
-            element.decompose()
+    # 移除空块（同样先收集后删除）
+    empty_blocks = [
+        element
+        for element in soup.find_all(["div", "section", "p", "span"])
+        if not element.get_text(strip=True) and not element.find("img")
+    ]
+    for element in empty_blocks:
+        element.decompose()
 
     cleaned = str(soup)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)

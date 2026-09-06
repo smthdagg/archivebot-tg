@@ -24,6 +24,18 @@ def test_removes_ad_nav_containers():
     assert "评论区" not in cleaned
 
 
+def test_decompose_in_loop_does_not_crash():
+    """回归：decompose 后代 attrs 置 None 导致的崩溃（bs4 遍历中删除）。"""
+    html = (
+        '<div class="ad-container">广告'
+        '<div class="ad-sub"><p>子广告</p><span>更多</span></div>'
+        "</div>"
+        "<div>正文内容</div>"
+    )
+    assert clean_html(html)  # 不抛 AttributeError
+    assert "正文内容" in clean_html(html)
+
+
 def test_clean_text_normalizes():
     text = "  第一行内容  \n\n\n  第二行\t内容  "
     assert clean_text(text) == "第一行内容\n\n第二行 内容"

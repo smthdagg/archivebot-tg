@@ -322,12 +322,16 @@ def _text_of(html_fragment: str) -> str:
 
 
 def _build_html(comments: list[dict[str, Any]], total: int | None) -> str:
-    """评论区 HTML 片段（追加在正文之后，样式继承模板）。"""
+    """评论区 HTML 片段（追加在正文之后，样式继承模板）。
+
+    容器不设 class：cleaner 的 blocklist 会把含 "comment" 的 class
+    （如 comments）当站内评论模块删除，导致评论区从渲染源消失。
+    """
     label = str(total) if total is not None else str(len(comments))
     parts = [
         '<hr class="rule" style="margin-top:26px">',
         f'<h2 style="font-size:17px;margin:14px 0 4px">评论区 · {label} 条</h2>',
-        '<div class="comments">',
+        '<div>',
     ]
     for c in comments:
         parts.append(_comment_div(c))
