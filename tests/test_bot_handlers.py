@@ -90,6 +90,13 @@ class _FakeFSM:
     async def update_data(self, **kwargs):
         self.data.update(kwargs)
 
+    async def set_state(self, state):
+        self.state = state
+
+    async def clear(self):
+        self.data = {}
+        self.state = None
+
     async def get_data(self):
         return dict(self.data)
 
@@ -184,7 +191,8 @@ def _answered_texts(obj):
 # ---------------------------------------------------------------------------
 def test_start_non_admin_creates_pending_application(db, db_factory, patch_session):
     msg = _FakeMessage(_FakeUser(1001, "newbie", language_code="en"))
-    _run(start_mod.on_start(msg))
+    fsm = _FakeFSM()
+    _run(start_mod.on_start(msg, fsm))
 
     from app.database.services import get_user_by_telegram_id
 
@@ -215,7 +223,7 @@ def test_start_admin_creates_superadmin_active(db, db_factory, patch_session, mo
     monkeypatch.setattr(common_mod, "get_settings", lambda: Settings(admin_ids=[ADMIN_ID], default_language="auto"))
 
     msg = _FakeMessage(_FakeUser(ADMIN_ID, "boss", language_code="en"))
-    _run(start_mod.on_start(msg))
+    _run(start_mod.on_start(msg, _FakeFSM()))
 
     from app.database.services import get_user_by_telegram_id
 
@@ -233,7 +241,7 @@ def test_start_admin_creates_superadmin_active(db, db_factory, patch_session, mo
 def test_start_existing_active_welcome(db, db_factory, patch_session):
     _mkuser(db, 2002, role=UserRole.USER)
     msg = _FakeMessage(_FakeUser(2002, "alice", language_code="en"))
-    _run(start_mod.on_start(msg))
+    _run(start_mod.on_start(msg, _FakeFSM()))
 
     assert len(msg.answers) == 1
     kb = msg.answers[0]["reply_markup"]
@@ -246,7 +254,8 @@ def test_start_existing_active_welcome(db, db_factory, patch_session):
 def test_start_disabled_user(db, db_factory, patch_session):
     _mkuser(db, 3003, status=UserStatus.DISABLED)
     msg = _FakeMessage(_FakeUser(3003, "blocked", language_code="en"))
-    _run(start_mod.on_start(msg))
+    fsm = _FakeFSM()
+    _run(start_mod.on_start(msg, fsm))
 
     assert len(msg.answers) == 1
     assert "disabled" in msg.answers[0]["text"].lower()
@@ -605,3 +614,63 @@ def test_menu_settings(db, patch_session):
 def test_extract_first_url_basics():
     assert extract_first_url("see https://a.b/c") == "https://a.b/c"
     assert extract_first_url("no link here") is None
+
+
+# ---------------------------------------------------------------------------
+# 申请暗号（REGISTRATION_CODE）
+# ---------------------------------------------------------------------------
+
+def test_start_with_code_required_asks_code_no_application(db, db_factory, patch_session, monkeypatch):
+    import app.bot.handlers.start as start_mod
+    monkeypatch.setattr(start_mod, "get_settings", lambda: Settings(registration_code="letmein", default_language="en-US"))
+
+    msg = _FakeMessage(_FakeUser(4001, "guest", language_code="en"))
+    fsm = _FakeFSM()
+    _run(start_mod.on_start(msg, fsm))
+
+    # 提示输入暗号，未创建申请单
+    assert "enter the registration code" in msg.answers[0]["text"]
+    from app.database.models import UserApplication
+    assert db.query(UserApplication).count() == 0
+    assert fsm.data["reg_user_id"] > 0
+
+
+def test_start_code_wrong_rejected_no_application(db, db_factory, patch_session, monkeypatch):
+    import app.bot.handlers.start as start_mod
+    monkeypatch.setattr(start_mod, "get_settings", lambda: Settings(registration_code="letmein", default_language="en-US"))
+
+    msg = _FakeMessage(_FakeUser(4002, "guest", language_code="en"))
+    fsm = _FakeFSM()
+    _run(start_mod.on_start(msg, fsm))
+    wrong = _FakeMessage(_FakeUser(4002, "guest"), text="wrong-code")
+    _run(start_mod.on_code_entered(wrong, fsm))
+
+    assert "Incorrect code" in wrong.answers[0]["text"]
+    from app.database.models import UserApplication
+    assert db.query(UserApplication).count() == 0
+
+
+def test_start_code_correct_creates_application(db, db_factory, patch_session, monkeypatch):
+    import app.bot.handlers.start as start_mod
+    monkeypatch.setattr(start_mod, "get_settings", lambda: Settings(registration_code="letmein", default_language="en-US"))
+
+    msg = _FakeMessage(_FakeUser(4003, "guest", language_code="en"))
+    fsm = _FakeFSM()
+    _run(start_mod.on_start(msg, fsm))
+    good = _FakeMessage(_FakeUser(4003, "guest"), text=" letmein ")  # 允许首尾空白
+    _run(start_mod.on_code_entered(good, fsm))
+
+    from app.database.models import UserApplication
+    apps = db.query(UserApplication).all()
+    assert len(apps) == 1 and apps[0].status == "PENDING"
+    assert "申请 ID：1" in good.answers[-1]["text"] or "Application ID" in good.answers[-1]["text"]
+
+
+def test_start_pending_application_reused_not_duplicated(db, db_factory, patch_session):
+    """未配置暗号（开放申请）时，重复 /start 复用同一申请单。"""
+    msg = _FakeMessage(_FakeUser(4004, "again", language_code="en"))
+    _run(start_mod.on_start(msg, _FakeFSM()))
+    _run(start_mod.on_start(msg, _FakeFSM()))
+
+    from app.database.models import UserApplication
+    assert db.query(UserApplication).count() == 1

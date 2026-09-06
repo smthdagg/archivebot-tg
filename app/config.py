@@ -66,6 +66,11 @@ class Settings(BaseSettings):
     # 代理环境下全部抓取失效。该段不可在公网路由，豁免不引入内网风险。
     ssrf_allowed_cidrs: str = "198.18.0.0/15"
 
+    # ---- 注册准入 ----
+    # 申请暗号：非空时新用户 /start 后必须输入该暗号才会创建申请单；
+    # 留空 = 开放申请（任何人可提交，管理员审批）。用于防垃圾申请。
+    registration_code: str = ""
+
     # ---- Cookie Profile（Phase 2，登录类网站）----
     # 用户自备 cookie，仅在用户自己登录过的网站使用（规格红线，不用于绕过付费墙）。
     # 结构：profile 名 → { 平台 → [Cookie-Editor 格式 cookie 字典] }。

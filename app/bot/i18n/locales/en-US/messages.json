@@ -111,5 +111,8 @@
   "platform.web": "Generic Web Page",
   "platform.unknown": "Unknown",
   "archive.output_screenshot": "Screenshot",
-  "error.concurrency_limit": "You have tasks in progress, please try again later"
+  "error.concurrency_limit": "You have tasks in progress, please try again later",
+  "user.enter_code": "🔐 This bot is invite-only.\n\nPlease enter the registration code (ask the admin):\nSend /cancel to abort.",
+  "user.code_invalid": "❌ Incorrect code, please try again (send /cancel to abort).",
+  "user.reg_cancelled": "Application cancelled. Send /start to restart."
 }
