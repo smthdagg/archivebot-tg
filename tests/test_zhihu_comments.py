@@ -64,7 +64,7 @@ def test_classify_zhihu_url(url, kind, item_id):
 
 
 def test_http_error_degrades_to_empty(monkeypatch, zhihu_cookies):
-    def _boom(url, cookies, *, max_root=100):
+    def _boom(url, cookies, parsed, *, max_root=100):
         raise RuntimeError("network error")
 
     monkeypatch.setattr(zhc, "_capture_comments_via_page", _boom)
@@ -89,16 +89,19 @@ def test_fetch_and_render_with_children(monkeypatch, zhihu_cookies):
     root2 = _comment(cid="2", content="<blockquote>引用原文</blockquote><p>第二条评论</p>", author=_author("丙"))
     root3 = _comment(cid="3", content="<p>第三页评论</p>", author=_author("丁"))
 
-    captured: dict = {"cookies": None}
+    captured: dict = {"cookies": None, "parsed": None}
     monkeypatch.setattr(
         zhc,
         "_capture_comments_via_page",
-        lambda url, cookies, *, max_root=100: (captured.update(cookies=cookies) or [root1, root2, root3]),
+        lambda url, cookies, parsed, *, max_root=100: (
+            captured.update(cookies=cookies, parsed=parsed) or [root1, root2, root3]
+        ),
     )
 
     result = zhc.fetch_zhihu_comments("https://zhuanlan.zhihu.com/p/2022463078160147125", zhihu_cookies)
 
     assert captured["cookies"] is zhihu_cookies
+    assert captured["parsed"] == ("articles", "2022463078160147125")
     assert result.ok
     # HTML：标题带条数、strong 保留、img → [图片]、script/外链剥除
     assert "评论区 · 3 条" in result.html
@@ -120,7 +123,9 @@ def test_fetch_and_render_with_children(monkeypatch, zhihu_cookies):
 def test_blank_and_malformed_comments_dropped(monkeypatch, zhihu_cookies):
     """纯空白内容/author 缺失/created_time 非法 → 有默认值、无有效内容时降级为空。"""
     weird = _comment(cid="1", content="<p>   </p>", author={}, created_time=-5)
-    monkeypatch.setattr(zhc, "_capture_comments_via_page", lambda url, cookies, *, max_root=100: [weird])
+    monkeypatch.setattr(
+        zhc, "_capture_comments_via_page", lambda url, cookies, parsed, *, max_root=100: [weird]
+    )
     result = zhc.fetch_zhihu_comments("https://zhuanlan.zhihu.com/p/1", zhihu_cookies)
     assert result.ok is False
     assert result.total == 0

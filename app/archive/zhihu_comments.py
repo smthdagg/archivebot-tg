@@ -90,7 +90,7 @@ def fetch_zhihu_comments(
         return ZhihuComments()
 
     try:
-        comments = _capture_comments_via_page(url, cookies, max_root=max_root)
+        comments = _capture_comments_via_page(url, cookies, parsed, max_root=max_root)
     except Exception as e:  # noqa: BLE001 - 评论为增强特性，任何失败降级跳过
         logger.warning("zhihu comments capture failed for %s: %s", parsed[1], e)
         return ZhihuComments()
@@ -114,23 +114,26 @@ def fetch_zhihu_comments(
 # ---------------------------------------------------------------------------
 
 def _capture_comments_via_page(
-    url: str, cookies: list[dict[str, Any]], *, max_root: int
+    url: str, cookies: list[dict[str, Any]], parsed: tuple[str, str], *, max_root: int
 ) -> list[dict[str, Any]]:
-    """打开知乎页面并滚动触发评论区，拦截 comment_v5 响应中的真实评论。
+    """打开知乎页面，点击评论区入口，拦截目标内容（kind+id）的 comment_v5 响应。
 
     知乎评论内容需 x-zse-96 签名（curl_cffi 免签名只能拿到 totals），页面 JS
     请求自带签名 —— 此处直接复用浏览器发出的响应，跨签名校验。
+
+    评论区默认折叠：回答页需点击「N 条评论」按钮才发请求（问题评论区按钮
+    无 ContentItem-action class，第一个该类按钮即首个回答的评论区）。逐个
+    点击可见的评论按钮并滚动，直到拦截到目标 kind+id 的 root_comment。
     """
     from playwright.sync_api import sync_playwright
 
+    kind, item_id = parsed
+    target_marker = f"/{kind}/{item_id}/root_comment"
     collected: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
 
     def on_response(response) -> None:
-        resp_url = response.url
-        if "comment_v5/" not in resp_url or "root_comment" not in resp_url:
-            return
-        if response.status != 200:
+        if target_marker not in response.url or response.status != 200:
             return
         try:
             payload = response.json()
@@ -169,15 +172,33 @@ def _capture_comments_via_page(
             page.goto(url, wait_until="networkidle", timeout=45000)
         except Exception:  # noqa: BLE001
             pass
-        # 滚动到底部触发评论区懒加载；滚动几轮后仍无评论响应则放弃
-        for _ in range(8):
+
+        # 点击评论区入口直到捕获到目标评论（文章/回答/想法评论区默认折叠）
+        for _ in range(10):
             if len(collected) >= max_root:
                 break
-            try:
-                page.evaluate("window.scrollBy(0, document.body.scrollHeight)")
-            except Exception:  # noqa: BLE001
+            buttons = page.query_selector_all(
+                "button.ContentItem-action, button:has-text('条评论'), button:has-text('评论')"
+            )
+            clicked = False
+            for btn in buttons:
+                try:
+                    btn.click(timeout=2500)
+                    clicked = True
+                    page.wait_for_timeout(1200)
+                except Exception:  # noqa: BLE001
+                    continue
+                if collected:
+                    break
+            if collected:
                 break
-            page.wait_for_timeout(900)
+            if not clicked:
+                # 没有更多可点按钮 → 滚动触发懒加载
+                try:
+                    page.evaluate("window.scrollBy(0, window.innerHeight)")
+                except Exception:  # noqa: BLE001
+                    break
+                page.wait_for_timeout(800)
         try:
             page.wait_for_timeout(1500)  # 等待最后一批响应回传
         except Exception:  # noqa: BLE001
