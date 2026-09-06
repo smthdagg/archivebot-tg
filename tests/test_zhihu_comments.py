@@ -34,44 +34,6 @@ def _comment(content="<p>说得好</p>", cid="1", author=None, **extra):
     return d
 
 
-class _FakeResp:
-    def __init__(self, status_code, payload=None):
-        self.status_code = status_code
-        self._payload = payload or {}
-
-    def json(self):
-        return self._payload
-
-
-class _FakeSession:
-    """记录请求 URL，按 offset 返回各页评论（缺页视为 is_end）。"""
-
-    def __init__(self, pages=None, status_code=200):
-        self.calls: list[str] = []
-        self.status_code = status_code
-        self.pages = pages or []
-
-    def get(self, url, timeout=30):
-        self.calls.append(url)
-        if self.status_code != 200:
-            return _FakeResp(self.status_code)
-        from urllib.parse import parse_qs, urlsplit
-
-        offset = int(parse_qs(urlsplit(url).query).get("offset", ["0"])[0])
-        idx = offset // 20
-        if idx < len(self.pages):
-            return _FakeResp(200, self.pages[idx])
-        return _FakeResp(200, {"data": [], "paging": {"is_end": True, "totals": 0}})
-
-
-def _paging_payload(comments, totals, is_end):
-    return {
-        "data": comments,
-        "paging": {"is_end": is_end, "totals": totals, "is_start": True},
-        "counts": {"total_counts": totals},
-    }
-
-
 @pytest.fixture()
 def zhihu_cookies():
     return [{"name": "z_c0", "value": "secret", "domain": ".zhihu.com", "path": "/"}]
@@ -102,7 +64,10 @@ def test_classify_zhihu_url(url, kind, item_id):
 
 
 def test_http_error_degrades_to_empty(monkeypatch, zhihu_cookies):
-    monkeypatch.setattr(zhc, "_make_session", lambda cookies: _FakeSession(status_code=500))
+    def _boom(url, cookies, *, max_root=100):
+        raise RuntimeError("network error")
+
+    monkeypatch.setattr(zhc, "_capture_comments_via_page", _boom)
     result = zhc.fetch_zhihu_comments("https://zhuanlan.zhihu.com/p/123", zhihu_cookies)
     assert result == ZhihuComments(total=0)
 
@@ -122,22 +87,21 @@ def test_fetch_and_render_with_children(monkeypatch, zhihu_cookies):
         child_comments=[child],
     )
     root2 = _comment(cid="2", content="<blockquote>引用原文</blockquote><p>第二条评论</p>", author=_author("丙"))
-    page1 = _paging_payload([root1, root2], totals=23, is_end=False)
-    page2 = _paging_payload(
-        [_comment(cid="3", content="<p>第三页评论</p>", author=_author("丁"))], totals=23, is_end=True
+    root3 = _comment(cid="3", content="<p>第三页评论</p>", author=_author("丁"))
+
+    captured: dict = {"cookies": None}
+    monkeypatch.setattr(
+        zhc,
+        "_capture_comments_via_page",
+        lambda url, cookies, *, max_root=100: (captured.update(cookies=cookies) or [root1, root2, root3]),
     )
-    session = _FakeSession(pages=[page1, page2])
-    monkeypatch.setattr(zhc, "_make_session", lambda cookies: session)
 
     result = zhc.fetch_zhihu_comments("https://zhuanlan.zhihu.com/p/2022463078160147125", zhihu_cookies)
 
+    assert captured["cookies"] is zhihu_cookies
     assert result.ok
-    assert result.total == 23
-    # 请求 URL：articles 资源 + offset 分页两页
-    assert "comment_v5/articles/2022463078160147125/root_comment" in session.calls[0]
-    assert "offset=0" in session.calls[0] and "offset=20" in session.calls[1]
-    # HTML：标题带总数、strong 保留、img → [图片]、script/外链剥除
-    assert "评论区 · 23 条" in result.html
+    # HTML：标题带条数、strong 保留、img → [图片]、script/外链剥除
+    assert "评论区 · 3 条" in result.html
     assert "<strong>支持</strong>" in result.html
     assert "[图片]" in result.html and "<img" not in result.html
     assert "<script" not in result.html and "evil.example.com" not in result.html
@@ -156,11 +120,10 @@ def test_fetch_and_render_with_children(monkeypatch, zhihu_cookies):
 def test_blank_and_malformed_comments_dropped(monkeypatch, zhihu_cookies):
     """纯空白内容/author 缺失/created_time 非法 → 有默认值、无有效内容时降级为空。"""
     weird = _comment(cid="1", content="<p>   </p>", author={}, created_time=-5)
-    session = _FakeSession(pages=[_paging_payload([weird], totals=1, is_end=True)])
-    monkeypatch.setattr(zhc, "_make_session", lambda cookies: session)
+    monkeypatch.setattr(zhc, "_capture_comments_via_page", lambda url, cookies, *, max_root=100: [weird])
     result = zhc.fetch_zhihu_comments("https://zhuanlan.zhihu.com/p/1", zhihu_cookies)
     assert result.ok is False
-    assert result.total == 1
+    assert result.total == 0
 
 
 def test_fmt_time_units():
