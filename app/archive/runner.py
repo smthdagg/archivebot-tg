@@ -91,24 +91,31 @@ def run_archive(
         cover_path=cover_src,
     )
 
-    # 渲染源兜底：部分平台（如知乎 save_post）只产出 content.txt + images/，
-    # article.html 与 content.md 双空——用纯文本段落 + 本地图片构造渲染源，
-    # 让 PDF/Markdown/长截图三路都能吃到内容（否则只剩模板标题）。
-    if not cleaned_html.strip() and not (article.markdown or "").strip() and cleaned_text.strip():
-        import html as _html
+    # 渲染源兜底：部分平台（如知乎 save_post）不产 content.html，只有
+    # content.md/txt + images/——cleaned_html 为空时依次从 markdown /
+    # 纯文本+图片 构造，让 PDF/Markdown/长截图三路都能吃到内容
+    # （否则只剩模板标题）。
+    if not cleaned_html.strip():
+        if (article.markdown or "").strip():
+            cleaned_html = markdown_mod.markdown_to_html(article.markdown)
+            logger.info(
+                "render source fallback: rendered markdown (%d chars)", len(cleaned_html)
+            )
+        elif cleaned_text.strip() and image_files:
+            import html as _html
 
-        paras = "".join(
-            f"<p>{_html.escape(line)}</p>"
-            for line in cleaned_text.splitlines()
-            if line.strip()
-        )
-        gallery = "".join(
-            f'<p><img src="images/{p.name}"/></p>'
-            for p in image_files
-            if p.stem != "avatar"
-        )
-        cleaned_html = paras + gallery
-        logger.info("render source built from text+images (no html/md from vendor)")
+            paras = "".join(
+                f"<p>{_html.escape(line)}</p>"
+                for line in cleaned_text.splitlines()
+                if line.strip()
+            )
+            gallery = "".join(
+                f'<p><img src="images/{p.name}"/></p>'
+                for p in image_files
+                if p.stem != "avatar"
+            )
+            cleaned_html = paras + gallery
+            logger.info("render source built from text+images (no html/md from vendor)")
 
     # 存档文件名：标题_YYYY-MM-DD_HHMM.ext（仅正文与图片，命名跟标题走）
     # archive_time 已在函数入口确定（默认 now UTC），用于本次全部产物的统一时间戳
