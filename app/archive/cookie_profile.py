@@ -222,7 +222,7 @@ def _method_based_injection(service_cls: type, cookies: list[dict[str, Any]]) ->
     """临时替换 `_get_cookies` 类方法，返回 profile cookie。"""
     original = getattr(service_cls, "_get_cookies", None)
 
-    def _patched() -> list[dict[str, Any]]:
+    def _patched(*args, **kwargs) -> list[dict[str, Any]]:
         return list(cookies)
 
     service_cls._get_cookies = _patched
