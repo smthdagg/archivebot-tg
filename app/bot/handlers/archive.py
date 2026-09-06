@@ -103,7 +103,24 @@ async def on_format_selected(callback: types.CallbackQuery, state: FSMContext) -
             try:
                 from app.archive.cookie_registry import SPECIAL_SITES as _SS
                 from app.config import get_settings as _GS
-                _profs = _GS().cookie_profiles or {}
+                # 文件优先：profile 文件会被运行时回写/更新，settings 有 lru_cache 旧值
+                _profs = {}
+                _pf = _GS().cookie_profiles_file
+                if _pf:
+                    from pathlib import Path as _Path
+                    import json as _json
+                    _pp = _Path(_pf)
+                    if not _pp.is_absolute():
+                        _pp = _Path("/app") / _pp
+                    if _pp.exists():
+                        try:
+                            _loaded = _json.loads(_pp.read_text(encoding="utf-8"))
+                            if isinstance(_loaded, dict):
+                                _profs = _loaded
+                        except Exception:
+                            _profs = {}
+                if not _profs:
+                    _profs = _GS().cookie_profiles or {}
                 if platform == Platform.WEB.value:
                     for _k, _cfg in _SS.items():
                         if _cfg.get("platform") != Platform.WEB.value:
