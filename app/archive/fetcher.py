@@ -399,6 +399,8 @@ def _classify(platform: Platform, exc: Exception) -> str:
     # X 平台所有风控提取都失败（实测 90s+ 才返回）——同视为需登录
     if platform == Platform.TWITTER and ("所有提取策略都失败" in str(exc) or "所有策略" in str(exc)):
         return "Login required."
+    if platform == Platform.ZHIHU and "cookies are not configured" in text:
+        return "Login required."
     if "404" in text or "not found" in text:
         return "Page not found"
     if "timeout" in text:
@@ -413,6 +415,9 @@ def _classify_code(platform: Platform, exc: Exception) -> str:
     if "login" in text or "captcha" in text:
         return ErrorCode.LOGIN_REQUIRED
     if platform == Platform.TWITTER and ("所有提取策略都失败" in str(exc) or "所有策略" in str(exc)):
+        return ErrorCode.LOGIN_REQUIRED
+    # 知乎：vendor 强制要求登录 cookie，缺失时明确归类
+    if platform == Platform.ZHIHU and "cookies are not configured" in text:
         return ErrorCode.LOGIN_REQUIRED
     if "404" in text or "not found" in text:
         return ErrorCode.NOT_FOUND
