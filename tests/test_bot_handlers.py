@@ -615,7 +615,9 @@ def test_extract_first_url_basics():
 
 def test_start_with_code_required_asks_code_no_application(db, db_factory, patch_session, monkeypatch):
     import app.bot.handlers.start as start_mod
-    monkeypatch.setattr(start_mod, "get_settings", lambda: Settings(registration_code="letmein", default_language="en-US"))
+    monkeypatch.setattr(
+        start_mod, "get_settings",
+        lambda: Settings(registration_code="letmein", default_language="en-US"))
 
     msg = _FakeMessage(_FakeUser(4001, "guest", language_code="en"))
     fsm = _FakeFSM()
@@ -630,7 +632,9 @@ def test_start_with_code_required_asks_code_no_application(db, db_factory, patch
 
 def test_start_code_wrong_rejected_no_application(db, db_factory, patch_session, monkeypatch):
     import app.bot.handlers.start as start_mod
-    monkeypatch.setattr(start_mod, "get_settings", lambda: Settings(registration_code="letmein", default_language="en-US"))
+    monkeypatch.setattr(
+        start_mod, "get_settings",
+        lambda: Settings(registration_code="letmein", default_language="en-US"))
 
     msg = _FakeMessage(_FakeUser(4002, "guest", language_code="en"))
     fsm = _FakeFSM()
@@ -645,7 +649,9 @@ def test_start_code_wrong_rejected_no_application(db, db_factory, patch_session,
 
 def test_start_code_correct_creates_application(db, db_factory, patch_session, monkeypatch):
     import app.bot.handlers.start as start_mod
-    monkeypatch.setattr(start_mod, "get_settings", lambda: Settings(registration_code="letmein", default_language="en-US"))
+    monkeypatch.setattr(
+        start_mod, "get_settings",
+        lambda: Settings(registration_code="letmein", default_language="en-US"))
 
     msg = _FakeMessage(_FakeUser(4003, "guest", language_code="en"))
     fsm = _FakeFSM()
