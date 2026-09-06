@@ -6,6 +6,8 @@
 import logging
 
 from aiogram import F, Router, types
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import func, select
 
@@ -15,13 +17,23 @@ from app.bot.keyboards import admin_menu, is_admin_role
 from app.database.database import SessionLocal
 from app.database.enums import ApplicationStatus, AuditAction, UserStatus
 from app.database.models import AuditLog, User, UserApplication
-from app.database.services import audit, get_user_by_telegram_id, now_utc
+from app.database.services import (
+    audit,
+    get_registration_code,
+    get_user_by_telegram_id,
+    now_utc,
+    set_setting,
+)
 from app.storage.manager import get_storage
 from app.tasks.queue import queue_stats
 
 logger = logging.getLogger(__name__)
 
 router = Router(name="admin")
+
+
+class AdminState(StatesGroup):
+    awaiting_regcode = State()
 
 
 def _back_kb(lang: str) -> InlineKeyboardMarkup:
@@ -43,6 +55,77 @@ async def admin_center(callback: types.CallbackQuery) -> None:
     finally:
         db.close()
     await callback.answer()
+
+
+# ---------------------------------------------------------------------------
+# 申请暗号（管理员查看/修改；存 system_settings，Web Admin 同步可改）
+# ---------------------------------------------------------------------------
+
+
+@router.callback_query(F.data == "adm:regcode")
+async def regcode_view(callback: types.CallbackQuery, state: FSMContext) -> None:
+    db = SessionLocal()
+    try:
+        admin = get_user_by_telegram_id(db, callback.from_user.id)
+        if admin is None or not is_admin_role(admin.role):
+            await callback.answer(t(user_language(admin), "user.denied"), show_alert=True)
+            return
+        lang = user_language(admin)
+        code = get_registration_code(db) or "—（开放申请）"
+        await state.clear()
+        await callback.message.edit_text(
+            t(lang, "admin.regcode.view", code=code),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text=t(lang, "admin.regcode.edit").split("：")[0].split(":")[0][:16] or "✏️",
+                                      callback_data="adm:regcode:edit")],
+                [InlineKeyboardButton(text=t(lang, "action.back"), callback_data="menu:admin")],
+            ]),
+        )
+    finally:
+        db.close()
+    await callback.answer()
+
+
+@router.callback_query(F.data == "adm:regcode:edit")
+async def regcode_edit_start(callback: types.CallbackQuery, state: FSMContext) -> None:
+    db = SessionLocal()
+    try:
+        admin = get_user_by_telegram_id(db, callback.from_user.id)
+        if admin is None or not is_admin_role(admin.role):
+            await callback.answer("denied", show_alert=True)
+            return
+        lang = user_language(admin)
+        await state.set_state(AdminState.awaiting_regcode)
+        await state.update_data(regcode_admin_id=admin.id, regcode_lang=lang)
+        await callback.message.edit_text(t(lang, "admin.regcode.edit"))
+    finally:
+        db.close()
+    await callback.answer()
+
+
+@router.message(AdminState.awaiting_regcode, F.text == "/cancel")
+async def regcode_edit_cancel(message: types.Message, state: FSMContext) -> None:
+    data = await state.get_data()
+    await state.clear()
+    await message.answer(t(data.get("regcode_lang", "zh-CN"), "action.cancel"))
+
+
+@router.message(AdminState.awaiting_regcode, F.text)
+async def regcode_edit_save(message: types.Message, state: FSMContext) -> None:
+    data = await state.get_data()
+    lang = data.get("regcode_lang", "zh-CN")
+    new_code = (message.text or "").strip()
+    if len(new_code) > 64:
+        await message.answer(t(lang, "error.unknown"))
+        return
+    db = SessionLocal()
+    try:
+        set_setting(db, "registration_code", new_code, operator_user_id=data.get("regcode_admin_id"))
+        db.commit()
+        await state.clear()
+        await message.answer(t(lang, "admin.regcode.saved", code=new_code or "—"))
+    finally:
+        db.close()
 
 
 # ---------------------------------------------------------------------------

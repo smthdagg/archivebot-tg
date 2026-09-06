@@ -114,5 +114,9 @@
   "error.concurrency_limit": "You have tasks in progress, please try again later",
   "user.enter_code": "🔐 This bot is invite-only.\n\nPlease enter the registration code (ask the admin):\nSend /cancel to abort.",
   "user.code_invalid": "❌ Incorrect code, please try again (send /cancel to abort).",
-  "user.reg_cancelled": "Application cancelled. Send /start to restart."
+  "user.reg_cancelled": "Application cancelled. Send /start to restart.",
+  "admin.regcode": "🔑 Registration Code",
+  "admin.regcode.view": "🔑 Registration code: {code}\n\nNew users must enter this code after /start to apply.\nEmpty = open registration.\n\n[✏️ Edit]",
+  "admin.regcode.edit": "✏️ Send the new registration code:\nSend /cancel to keep current.",
+  "admin.regcode.saved": "✅ Registration code updated to: {code}"
 }

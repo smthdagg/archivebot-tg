@@ -15,11 +15,10 @@ from aiogram.fsm.state import State, StatesGroup
 from app.bot.common import ensure_user, user_language
 from app.bot.i18n import t
 from app.bot.keyboards import main_menu
-from app.config import get_settings
 from app.database.database import SessionLocal
 from app.database.enums import UserStatus
 from app.database.models import UserApplication
-from app.database.services import audit
+from app.database.services import audit, get_registration_code
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +65,7 @@ async def on_start(message: types.Message, state: FSMContext) -> None:
 
 async def _handle_pending(message: types.Message, state: FSMContext, db, user, lang: str) -> None:
     """PENDING 用户：站点开启暗号且尚无未决申请时，先索要暗号；通过才建单。"""
-    code_required = bool(get_settings().registration_code)
+    code_required = bool(get_registration_code(db))
 
     if code_required and not _has_pending_application(db, user.telegram_id):
         # 进入暗号输入态（此时还不建申请单，避免垃圾申请占位）
@@ -93,13 +92,13 @@ async def on_code_cancel(message: types.Message, state: FSMContext) -> None:
 async def on_code_entered(message: types.Message, state: FSMContext) -> None:
     data = await state.get_data()
     lang = data.get("reg_lang", "zh-CN")
-    expected = (get_settings().registration_code or "").strip()
 
+    db = SessionLocal()
+    expected = get_registration_code(db).strip()
     if (message.text or "").strip() != expected:
         await message.answer(t(lang, "user.code_invalid"))
         return
 
-    db = SessionLocal()
     try:
         # 暗号正确 → 创建申请单（进入审批队列）
         class _RefUser:

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Settings · ArchiveBOT Admin{% endblock %}
+{% block content %}
+<h2 style="margin:0 0 8px">⚙️ Settings</h2>
+<p class="muted">Runtime settings stored in <code>system_settings</code> (immediate effect, no restart). Bot admin center can edit the same values.</p>
+
+{% if saved %}
+<div style="background:#e6f6e6;border:1px solid #9fd89f;border-radius:8px;padding:10px 14px;margin:12px 0;color:#1c6b1c">✅ Saved</div>
+{% endif %}
+
+<h3 style="margin:18px 0 6px">🔑 Registration code</h3>
+<p class="muted">When set, new users must enter this code after /start before an application is created (invite-only). Empty = open registration.</p>
+<form method="post" action="/admin/settings/registration-code" style="max-width:520px">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="text" name="registration_code" value="{{ registration_code }}" placeholder="(empty = open registration)"
+         style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:8px;font-family:monospace">
+  <button type="submit" class="btn" style="margin-top:10px">Save</button>
+</form>
+<p class="muted" style="margin-top:8px">Last updated: {{ regcode_updated or "—" }}{% if regcode_updated_by %} · by user #{{ regcode_updated_by }}{% endif %}</p>
+{% endblock %}

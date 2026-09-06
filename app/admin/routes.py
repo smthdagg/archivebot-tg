@@ -12,7 +12,7 @@ from app.admin.csrf import csrf_guard, generate_csrf_token, set_csrf_on_response
 from app.admin.ratelimit import login_throttle
 from app.database.database import SessionLocal
 from app.database.enums import AuditAction
-from app.database.models import AuditLog, Task, User
+from app.database.models import AuditLog, SystemSetting, Task, User
 from app.database.services import audit
 from app.storage.manager import get_storage
 from app.tasks.queue import queue_stats
@@ -204,6 +204,45 @@ def _cookie_banner() -> str | None:
     except Exception:
         pass
     return None
+
+
+@router.get("/settings", response_class=HTMLResponse)
+@login_required
+async def settings_page(request: Request):
+
+    db = SessionLocal()
+    try:
+        row = db.get(SystemSetting, "registration_code")
+        code = (row.value if row else "") or ""
+        return _render(request, "settings.html", page="settings",
+                       registration_code=code,
+                       regcode_updated=row.updated_at.strftime("%Y-%m-%d %H:%M") if row and row.updated_at else None,
+                       regcode_updated_by=row.updated_by if row else None,
+                       saved=False)
+    finally:
+        db.close()
+
+
+@router.post("/settings/registration-code")
+@login_required
+async def settings_save_regcode(request: Request, _: None = Depends(csrf_guard)):
+    from app.database.services import set_setting
+
+    form = await request.form()
+    code = str(form.get("registration_code") or "").strip()[:64]
+    db = SessionLocal()
+    try:
+        # 单账号 Session（无具体管理员 ID），updated_by 置空
+        set_setting(db, "registration_code", code, operator_user_id=None)
+        db.commit()
+        row = db.get(SystemSetting, "registration_code")
+        return _render(request, "settings.html", page="settings",
+                       registration_code=code,
+                       regcode_updated=row.updated_at.strftime("%Y-%m-%d %H:%M") if row and row.updated_at else None,
+                       regcode_updated_by=row.updated_by if row else None,
+                       saved=True)
+    finally:
+        db.close()
 
 
 @router.get("/cookies", response_class=HTMLResponse)

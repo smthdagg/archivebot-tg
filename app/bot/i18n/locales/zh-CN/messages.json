@@ -114,5 +114,9 @@
   "error.concurrency_limit": "有任务正在处理，请稍后再试 / You have tasks in progress, please try again later",
   "user.enter_code": "🔐 本站采用邀请制。\n\n请输入申请暗号（向管理员获取）：\n发送 /cancel 可取消。",
   "user.code_invalid": "❌ 暗号不正确，请重新输入（发送 /cancel 可取消）。",
-  "user.reg_cancelled": "已取消申请。如需继续，请重新发送 /start。"
+  "user.reg_cancelled": "已取消申请。如需继续，请重新发送 /start。",
+  "admin.regcode": "🔑 申请暗号",
+  "admin.regcode.view": "🔑 申请暗号：{code}\n\n新用户 /start 后需输入此暗号才会创建申请。\n留空表示开放申请。\n\n[✏️ 修改暗号]",
+  "admin.regcode.edit": "✏️ 请直接发送新的申请暗号：\n发送 /cancel 取消（保持不变）。",
+  "admin.regcode.saved": "✅ 申请暗号已更新为：{code}"
 }

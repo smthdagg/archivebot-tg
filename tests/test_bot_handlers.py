@@ -613,11 +613,14 @@ def test_extract_first_url_basics():
 # 申请暗号（REGISTRATION_CODE）
 # ---------------------------------------------------------------------------
 
-def test_start_with_code_required_asks_code_no_application(db, db_factory, patch_session, monkeypatch):
-    import app.bot.handlers.start as start_mod
-    monkeypatch.setattr(
-        start_mod, "get_settings",
-        lambda: Settings(registration_code="letmein", default_language="en-US"))
+def _set_code(db, code="letmein"):
+    from app.database.models import SystemSetting
+    db.add(SystemSetting(key="registration_code", value=code))
+    db.commit()
+
+
+def test_start_with_code_required_asks_code_no_application(db, db_factory, patch_session):
+    _set_code(db)
 
     msg = _FakeMessage(_FakeUser(4001, "guest", language_code="en"))
     fsm = _FakeFSM()
@@ -630,11 +633,8 @@ def test_start_with_code_required_asks_code_no_application(db, db_factory, patch
     assert fsm.data["reg_user_id"] > 0
 
 
-def test_start_code_wrong_rejected_no_application(db, db_factory, patch_session, monkeypatch):
-    import app.bot.handlers.start as start_mod
-    monkeypatch.setattr(
-        start_mod, "get_settings",
-        lambda: Settings(registration_code="letmein", default_language="en-US"))
+def test_start_code_wrong_rejected_no_application(db, db_factory, patch_session):
+    _set_code(db)
 
     msg = _FakeMessage(_FakeUser(4002, "guest", language_code="en"))
     fsm = _FakeFSM()
@@ -647,11 +647,8 @@ def test_start_code_wrong_rejected_no_application(db, db_factory, patch_session,
     assert db.query(UserApplication).count() == 0
 
 
-def test_start_code_correct_creates_application(db, db_factory, patch_session, monkeypatch):
-    import app.bot.handlers.start as start_mod
-    monkeypatch.setattr(
-        start_mod, "get_settings",
-        lambda: Settings(registration_code="letmein", default_language="en-US"))
+def test_start_code_correct_creates_application(db, db_factory, patch_session):
+    _set_code(db)
 
     msg = _FakeMessage(_FakeUser(4003, "guest", language_code="en"))
     fsm = _FakeFSM()

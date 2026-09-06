@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database.enums import AuditAction, UserRole, UserStatus
-from app.database.models import AuditLog, User
+from app.database.models import AuditLog, SystemSetting, User
 
 
 def now_utc() -> datetime:
@@ -76,3 +76,35 @@ def audit(
         )
     )
     db.flush()
+
+
+# ---------------------------------------------------------------------------
+# 系统设置（system_settings 键值；供 Bot 管理中心 / Web Admin 运行时修改）
+# ---------------------------------------------------------------------------
+
+def get_setting(db: Session, key: str, default: str = "") -> str:
+    row = db.get(SystemSetting, key)
+    if row is None or row.value is None:
+        return default
+    return row.value
+
+
+def set_setting(db: Session, key: str, value: str, operator_user_id: int | None = None) -> None:
+    row = db.get(SystemSetting, key)
+    if row is None:
+        row = SystemSetting(key=key)
+    row.value = value
+    row.updated_by = operator_user_id
+    db.add(row)
+    audit(db, action="SETTING_CHANGED", operator_user_id=operator_user_id,
+          target_type="setting", target_id=key, details={"key": key})
+
+
+def get_registration_code(db: Session) -> str:
+    """申请暗号：system_settings 优先（Bot/Web 可运行时修改），env 兜底。"""
+    from app.config import get_settings
+
+    db_val = get_setting(db, "registration_code", "")
+    if db_val:
+        return db_val.strip()
+    return (get_settings().registration_code or "").strip()
