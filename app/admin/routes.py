@@ -110,7 +110,6 @@ async def dashboard(request: Request):
         storage = get_storage()
         today = func.date(Task.created_at)
         ctx = {
-            "request": request,
             "page": "dashboard",
             "users_total": db.scalar(select(func.count(User.id))) or 0,
             "users_pending": db.scalar(select(func.count(User.id)).where(User.status == "PENDING")) or 0,
