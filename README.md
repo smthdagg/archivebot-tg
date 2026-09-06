@@ -15,6 +15,7 @@
 - **Bot 体验**：双语（`zh-CN` / `en-US`，自动跟随 Telegram 语言）、`/start` 审批流、URL 自动识别与预览、`/` 快捷选格式、任务进度与取消、完成消息含原文摘要（不走 LLM，原文句子拼接，避免幻觉）
 - **平台覆盖**
   - 文本：微信公众号、`x.com/twitter`、小红书、微博、知乎、Reddit、通用网页（`webpage_service`，Playwright + Readability）
+  - 知乎评论区：带登录态归档时自动抓取评论区（作者/时间/赞数/回复楼），并入 PDF/长截图文末与 Markdown 交付；失败自动降级不影响正文
   - 视频：YouTube / Bilibili / 抖音 / 快手 / Instagram（`yt-dlp`，`videos/video.mp4` 单文件交付）；TikTok 未适配
   - 财新付费墙特化：反检测登录态注入、**长文分页拼接（?p1..?pN）**、黄金图找回与跨页去重、提示注入蜜罐剔除、`/m/` 手机链接归一化
   - 长截图：`PDF` 同模板的 `full_page` PNG（800px 宽、2x、超 40MB 转 JPEG）
