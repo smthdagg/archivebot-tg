@@ -24,8 +24,9 @@ SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519}"        # SSH 密钥路径；私有�
 #    绝不随代码覆盖（否则 deploy 会丢掉 VPS 上的独立配置）。
 # ._* 是 macOS tar 打包时的 AppleDouble 元数据文件（内容含 null 字节），
 # 混进 migrations/ 会被 alembic 当迁移脚本加载而报 SyntaxError。
+# 注意 bsdtar 的 --exclude 按完整路径匹配，需用 *._* 才能命中任意层级。
 EXCLUDES=(.git .gitmodules .gitignore .venv .pytest_cache .ruff_cache .worktrees .serena .zcode
-          __pycache__ "*.pyc" .DS_Store "._*" storage data .env .env.example)
+          __pycache__ "*.pyc" .DS_Store "*._*" storage data .env .env.example)
 # -----------------------------------------
 
 SKIP_TESTS=0; SKIP_BUILD=0; NO_RESTART=0
@@ -52,7 +53,10 @@ echo "==> [2/5] 打包（排除: ${EXCLUDES[*]}）"
 EXCL_ARGS=()
 for e in "${EXCLUDES[@]}"; do EXCL_ARGS+=(--exclude="$e"); done
 PKG="/tmp/archivebot-deploy-$(date +%s).tar.gz"
-tar "${EXCL_ARGS[@]}" -czf "$PKG" .
+# COPYFILE_DISABLE=1：macOS bsdtar 会把文件 xattr（com.apple.provenance 等）现场
+# 生成为 AppleDouble（._*）条目，内容含 null 字节；混进 migrations/ 会被 VPS 上的
+# alembic 当迁移脚本加载而报 SyntaxError（GNU tar 解包时落盘为 ._文件）。
+COPYFILE_DISABLE=1 tar "${EXCL_ARGS[@]}" -czf "$PKG" .
 echo "    包: $PKG ($(du -h "$PKG" | cut -f1))"
 
 echo "==> [3/5] 上传并解压到 $VPS_USER@$VPS_HOST:$VPS_DIR"
