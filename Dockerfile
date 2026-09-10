@@ -47,5 +47,8 @@ RUN pip install --upgrade pip && \
 COPY app ./app
 COPY vendor/wechat_to_md ./vendor/wechat_to_md
 COPY scripts ./scripts
+# Alembic：容器内可直接 `alembic upgrade head`（docs/07 §8）
+COPY alembic.ini ./alembic.ini
+COPY migrations ./migrations
 
 CMD ["python", "-m", "app.main"]
