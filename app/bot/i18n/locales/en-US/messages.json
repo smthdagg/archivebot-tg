@@ -159,5 +159,10 @@
   "weread.status_header": "📡 WeChat Read / subscription status",
   "weread.status_ok": "✅ Logged in ({account})",
   "weread.status_bad": "❌ Not logged in or expired: {err}",
-  "weread.no_accounts": "No public account subscriptions on the server yet."
+  "weread.no_accounts": "No public account subscriptions on the server yet.",
+  "admin.cookies": "🍪 Cookies",
+  "admin.cookies_empty": "📋 No special-site cookies configured",
+  "admin.weread": "📡 WeChat Read",
+  "admin.weread.login_btn": "📷 Scan to log in / re-login",
+  "weread.login_in_progress": "⏳ A login flow is already in progress; finish or wait for it first."
 }

@@ -159,5 +159,10 @@
   "weread.status_header": "📡 微信读书 / 公众号订阅状态",
   "weread.status_ok": "✅ 已登录（{account}）",
   "weread.status_bad": "❌ 未登录或已失效：{err}",
-  "weread.no_accounts": "服务端尚无公众号订阅。"
+  "weread.no_accounts": "服务端尚无公众号订阅。",
+  "admin.cookies": "🍪 Cookie 管理",
+  "admin.cookies_empty": "📋 暂无特殊网站配置",
+  "admin.weread": "📡 微信读书",
+  "admin.weread.login_btn": "📷 扫码登录 / 重新登录",
+  "weread.login_in_progress": "⏳ 已有登录流程进行中，请先完成或等待其结束。"
 }

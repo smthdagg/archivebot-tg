@@ -66,6 +66,10 @@ def admin_menu(lang: str) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text=t(lang, "admin.status"), callback_data="adm:status")],
             [InlineKeyboardButton(text=t(lang, "admin.logs"), callback_data="adm:logs")],
             [InlineKeyboardButton(text=t(lang, "admin.regcode"), callback_data="adm:regcode")],
+            [
+                InlineKeyboardButton(text=t(lang, "admin.cookies"), callback_data="adm:cookies"),
+                InlineKeyboardButton(text=t(lang, "admin.weread"), callback_data="adm:weread"),
+            ],
             [InlineKeyboardButton(text=t(lang, "action.back"), callback_data="menu")],
         ]
     )

@@ -83,15 +83,11 @@ def _update_env_cookie_file(path_str: str) -> None:
     env_path.write_text("\n".join(out) + "\n", encoding="utf-8")
 
 
-@router.message(Command("cookies"))
-async def cookies_list(message: types.Message) -> None:
-    if not _is_admin(message.from_user.id):
-        await message.answer("⛔ 仅管理员可用")
-        return
+def cookie_list_text() -> str:
+    """Cookie 站点列表文案（/cookies 命令与管理中心 adm:cookies 页共用）。"""
     items = admin_cookie_list_items()
     if not items:
-        await message.answer("📋 暂无特殊网站配置")
-        return
+        return ""
     lines = ["📋 Cookie 站点列表"]
     for it in items:
         exp_str = it["expires_at"].strftime("%Y-%m-%d") if it["expires_at"] else "—"
@@ -101,7 +97,19 @@ async def cookies_list(message: types.Message) -> None:
             f"   状态 {it['status']} · 过期 {exp_str} · {days}"
         )
     lines.append("\n更新：回复 cookies.txt 文件并执行 /set_cookie <site>")
-    await message.answer("\n".join(lines))
+    return "\n".join(lines)
+
+
+@router.message(Command("cookies"))
+async def cookies_list(message: types.Message) -> None:
+    if not _is_admin(message.from_user.id):
+        await message.answer("⛔ 仅管理员可用")
+        return
+    text = cookie_list_text()
+    if not text:
+        await message.answer("📋 暂无特殊网站配置")
+        return
+    await message.answer(text)
 
 
 @router.message(Command("set_cookie"))

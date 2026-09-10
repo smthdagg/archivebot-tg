@@ -603,6 +603,89 @@ async def on_archive_from_notification(
 # 管理员：扫码登录 / 状态
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# 管理员：扫码登录 / 状态（命令与管理中心按钮共用）
+# ---------------------------------------------------------------------------
+
+_LOGIN_IN_PROGRESS = False
+
+
+def _admin_role_ok(db, user: object | None) -> bool:
+    """管理中心按钮的 RBAC：数据库 role 校验（与 adm:* 回调一致）。"""
+    from app.bot.keyboards import is_admin_role
+
+    return user is not None and is_admin_role(user.role)
+
+
+async def run_weread_login(message: types.Message, lang: str, operator_telegram_id: int) -> None:
+    """扫码登录全流程：二维码 → 轮询 → 结果。成功记 WEREAD_LOGIN 审计。"""
+    global _LOGIN_IN_PROGRESS
+    if _LOGIN_IN_PROGRESS:
+        await message.answer(t(lang, "weread.login_in_progress"))
+        return
+    _LOGIN_IN_PROGRESS = True
+    try:
+        msg = await message.answer(t(lang, "weread.login_started"))
+        logged_in = False
+        try:
+            async for event in weread_client.login_events_async():
+                if event.get("event") == "qr":
+                    qr = _ascii_qr(event.get("url", ""))
+                    await msg.edit_text(
+                        f"<pre>{qr}</pre>\n{t(lang, 'weread.login_scan')}",
+                        parse_mode="HTML",
+                    )
+                elif event.get("event") == "done":
+                    logged_in = True
+                    db = SessionLocal()
+                    try:
+                        audit(db, action=AuditAction.WEREAD_LOGIN,
+                              operator_user_id=operator_telegram_id,
+                              target_type="weread", target_id=str(event.get("account", "default")))
+                        db.commit()
+                    finally:
+                        db.close()
+                    await msg.edit_text(
+                        t(lang, "weread.login_ok", account=event.get("account", "default"))
+                    )
+        except WereadError as e:
+            logger.warning("weread login failed: %s", e)
+            await msg.edit_text(t(lang, "weread.login_failed", err=str(e)[:200]))
+            return
+        if not logged_in:
+            await msg.edit_text(t(lang, "weread.login_expired"))
+    finally:
+        _LOGIN_IN_PROGRESS = False
+
+
+async def weread_status_text(db, lang: str) -> str:
+    """微信读书 + 订阅状态页文案（/weread_status 命令与 adm:weread 页共用）。"""
+    lines = [t(lang, "weread.status_header")]
+    try:
+        st = await weread_client.call_async("status")
+        lines.append(t(lang, "weread.status_ok", account=st.get("account", "default")))
+    except WereadError as e:
+        lines.append(t(lang, "weread.status_bad", err=str(e)[:160]))
+    accounts = db.scalars(
+        select(WxMpAccount).where(WxMpAccount.active.is_(True)).order_by(WxMpAccount.created_at)
+    ).all()
+    if not accounts:
+        lines.append(t(lang, "weread.no_accounts"))
+    else:
+        for account in accounts:
+            lines.append(
+                t(
+                    lang,
+                    "subscribe.list_status_line",
+                    name=_display_name(account, account.account_id),
+                    account_id=account.account_id,
+                    count=_account_sub_count(db, account.account_id),
+                    synckey=account.last_synckey or 0,
+                )
+            )
+    return "\n".join(lines)
+
+
 @router.message(Command("weread_login"))
 async def weread_login_cmd(message: types.Message) -> None:
     if not _is_admin(message.from_user.id):
@@ -614,36 +697,23 @@ async def weread_login_cmd(message: types.Message) -> None:
         lang = user_language(user, message.from_user.language_code)
     finally:
         db.close()
+    await run_weread_login(message, lang, message.from_user.id)
 
-    msg = await message.answer(t(lang, "weread.login_started"))
-    logged_in = False
+
+@router.callback_query(F.data == "wlogin")
+async def on_weread_login_button(callback: types.CallbackQuery) -> None:
+    """管理中心「扫码登录」按钮（RBAC 与 adm:* 一致，走 DB role）。"""
+    db = SessionLocal()
     try:
-        async for event in weread_client.login_events_async():
-            if event.get("event") == "qr":
-                qr = _ascii_qr(event.get("url", ""))
-                await msg.edit_text(
-                    f"<pre>{qr}</pre>\n{t(lang, 'weread.login_scan')}",
-                    parse_mode="HTML",
-                )
-            elif event.get("event") == "done":
-                logged_in = True
-                db = SessionLocal()
-                try:
-                    audit(db, action=AuditAction.WEREAD_LOGIN,
-                          operator_user_id=message.from_user.id,
-                          target_type="weread", target_id=str(event.get("account", "default")))
-                    db.commit()
-                finally:
-                    db.close()
-                await msg.edit_text(
-                    t(lang, "weread.login_ok", account=event.get("account", "default"))
-                )
-    except WereadError as e:
-        logger.warning("weread login failed: %s", e)
-        await msg.edit_text(t(lang, "weread.login_failed", err=str(e)[:200]))
-        return
-    if not logged_in:
-        await msg.edit_text(t(lang, "weread.login_expired"))
+        user = get_user_by_telegram_id(db, callback.from_user.id)
+        lang = user_language(user, callback.from_user.language_code)
+        if not _admin_role_ok(db, user):
+            await callback.answer(t(lang, "user.denied"), show_alert=True)
+            return
+    finally:
+        db.close()
+    await callback.answer()
+    await run_weread_login(callback.message, lang, callback.from_user.id)
 
 
 @router.message(Command("weread_status"))
@@ -655,29 +725,6 @@ async def weread_status_cmd(message: types.Message) -> None:
     try:
         user = get_user_by_telegram_id(db, message.from_user.id)
         lang = user_language(user, message.from_user.language_code)
-        lines = [t(lang, "weread.status_header")]
-        try:
-            st = await weread_client.call_async("status")
-            lines.append(t(lang, "weread.status_ok", account=st.get("account", "default")))
-        except WereadError as e:
-            lines.append(t(lang, "weread.status_bad", err=str(e)[:160]))
-        accounts = db.scalars(
-            select(WxMpAccount).where(WxMpAccount.active.is_(True)).order_by(WxMpAccount.created_at)
-        ).all()
-        if not accounts:
-            lines.append(t(lang, "weread.no_accounts"))
-        else:
-            for account in accounts:
-                lines.append(
-                    t(
-                        lang,
-                        "subscribe.list_status_line",
-                        name=_display_name(account, account.account_id),
-                        account_id=account.account_id,
-                        count=_account_sub_count(db, account.account_id),
-                        synckey=account.last_synckey or 0,
-                    )
-                )
-        await message.answer("\n".join(lines))
+        await message.answer(await weread_status_text(db, lang))
     finally:
         db.close()
