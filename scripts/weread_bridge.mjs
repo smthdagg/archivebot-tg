@@ -67,7 +67,22 @@ async function loadWereadOmni() {
 async function openCanonical() {
   const { AccountManager } = await loadWereadOmni();
   const manager = new AccountManager({ env: process.env });
-  const opened = await manager.open();
+  let opened;
+  try {
+    opened = await manager.open();
+  } catch (err) {
+    const msg = String(err?.message ?? err);
+    // 「could not be read」= 无账号文件；「Received undefined」= 全新安装
+    // （config.json 不存在 → 默认账号为 undefined 时上游 join 崩溃）。
+    // 两种都按「登录超时」语义抛出，Python 侧归类为 WereadTokenExpired
+    // → 提示管理员执行 /weread_login
+    if (/could not be read|not logged in|Received undefined/.test(msg)) {
+      const e = new Error("weread account not logged in (admin: /weread_login)");
+      e.errCode = -2012;
+      throw e;
+    }
+    throw err;
+  }
   return opened;
 }
 
