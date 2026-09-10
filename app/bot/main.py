@@ -8,7 +8,7 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from app.bot.handlers import admin, archive, cookies, history, menu, start
+from app.bot.handlers import admin, archive, cookies, history, menu, start, subscribe
 from app.config import get_settings
 from app.database.database import init_db
 
@@ -29,6 +29,9 @@ async def main() -> None:
     dp = Dispatcher(storage=MemoryStorage())
     dp.include_routers(
         start.router,
+        # subscribe 必须在 archive 之前：archive 有任意含 http 文本的兜底
+        # handler，/subscribe <文章URL> 会被它抢走
+        subscribe.router,
         archive.router,
         history.router,
         menu.router,

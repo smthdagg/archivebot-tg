@@ -20,6 +20,7 @@
 | ADR-9 | SSRF 防护在**入队前**做 URL 校验，worker 内再次防御 | 规格 §50；双保险（bot 快速失败 + worker 兜底）；`ssrf_guard` 劫持 `Session.send` 覆盖重定向每一跳 |
 | ADR-10 | 本地环境以 Docker 为准（`python:3.12-slim`），宿主机仅用于编辑/测试 | ArchiveBOT 依赖 Playwright/Chromium 与系统库，容器化最稳；本地开发用 `uv`/`.venv`（3.12），CI 统一 3.12 |
 | ADR-11 | `X` 等登录墙平台**仅用用户自备登录态**（Cookie Profile） | 规格红线：不绕过访问控制；`twitter/xhs/wechat/reddit/zhihu` 已修通注入（`auth_token/ct0` 双域），未授权时规范落 `LOGIN_REQUIRED`；真实抓取需 `cookie_profile`，鉴别单元不碰外网 |
+| ADR-12 | 公众号**订阅跟踪**走微信读书 API（`weread-omni` npm 包，Node 子进程桥接 `scripts/weread_bridge.mjs`）；**单篇归档保持直连渲染** | 单篇即发即归档保真度最高（直连原始 HTML，不变）；批量跟踪需要结构化订阅列表与增量游标（synckey），微信读书是腾讯自家授权接入公众号内容的通道，风控暴露面小；weread-omni 明确不绕过 JS 验证/验证码/指纹（-2041 转人工），与红线 10 一致；凭据由 weread-omni 自管（`WEREAD_CONFIG_DIR=data/weread` 持久卷），worker daemon 线程定时增量检查；分发默认「通知+一键归档」，可按订阅切 auto（交付方式为订阅级设置，非全局全自动） |
 
 ---
 
