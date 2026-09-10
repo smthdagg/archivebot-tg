@@ -66,6 +66,13 @@ class FileType(StrEnum):
     SCREENSHOT = "SCREENSHOT"
 
 
+# ---- 公众号订阅交付方式（微信读书路线，Phase 2）----
+
+class DeliveryMode(StrEnum):
+    NOTIFY = "notify"  # 默认：推「标题+链接+[归档]按钮」，用户点击才建任务
+    AUTO = "auto"      # 全自动：新文章直接建归档任务并推文件
+
+
 # ---- 审计动作常量（设计规格 §39）----
 
 class AuditAction(StrEnum):
@@ -105,6 +112,9 @@ class AuditAction(StrEnum):
     TASK_RETRY = "TASK_RETRY"
     TASK_CANCEL = "TASK_CANCEL"
     COOKIE_UPDATED = "COOKIE_UPDATED"
+    SUBSCRIBE = "SUBSCRIBE"
+    UNSUBSCRIBE = "UNSUBSCRIBE"
+    WEREAD_LOGIN = "WEREAD_LOGIN"
     SETTINGS_CHANGED = "SETTINGS_CHANGED"
 
 

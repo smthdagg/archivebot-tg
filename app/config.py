@@ -78,6 +78,15 @@ class Settings(BaseSettings):
     cookie_profiles: dict[str, dict[str, list[dict[str, Any]]]] = Field(default_factory=dict)
     cookie_profiles_file: str = ""
 
+    # ---- 微信公众号订阅（微信读书路线，Phase 2）----
+    # 服务端共享一个微信读书账号（管理员扫码登录，凭据由 weread-omni 自管，
+    # 存于 weread_config_dir）。worker daemon 线程按间隔增量检查新文章并分发。
+    wasub_check_interval_minutes: int = 240
+    wasub_max_articles_per_cycle: int = 10   # 单账号单轮最多处理的文章数（超出本轮丢弃）
+    wasub_max_subs_per_user: int = 10        # 每用户订阅号上限
+    wasub_max_accounts: int = 30             # 全站公众号软上限（超出仅提示管理员）
+    weread_config_dir: str = "data/weread"   # weread-omni 凭据目录（WEREAD_CONFIG_DIR）
+
     @model_validator(mode="after")
     def _load_cookie_profiles_file(self) -> "Settings":
         if self.cookie_profiles_file:
