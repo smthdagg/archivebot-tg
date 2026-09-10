@@ -66,14 +66,28 @@ def _is_admin(user_id: int) -> bool:
 
 
 def _ascii_qr(url: str) -> str:
-    """二维码 URL → Telegram 可显示的 ASCII 块（每模块 2×2 字符保证方形可扫）。"""
+    """二维码 → 半块字符画（▀▄█ 每行打包两行模块）。
+
+    微信登录 URL 的二维码约 45×45 模块，逐模块 2×2 字符渲染会超 Telegram
+    4096 字符上限（MESSAGE_TOO_LONG 导致登录流程卡死）。半块渲染后约
+    1.2k 字符，且宽高比 ≈1.2:1 接近方形，可正常扫描。
+    """
     import qrcode
 
-    qr = qrcode.QRCode(border=1)
+    qr = qrcode.QRCode(border=2)
     qr.add_data(url)
     qr.make(fit=True)
-    rows = ["".join("██" if dark else "  " for dark in row) for row in qr.get_matrix()]
-    return "\n".join(f"{row}\n{row}" for row in rows)
+    matrix = qr.get_matrix()
+    if len(matrix) % 2:  # 奇数行补一行空白，方便两两打包
+        matrix.append([False] * len(matrix[0]))
+    lines = []
+    for y in range(0, len(matrix), 2):
+        row = []
+        for x in range(len(matrix[y])):
+            top, bottom = matrix[y][x], matrix[y + 1][x]
+            row.append("█" if top and bottom else "▀" if top else "▄" if bottom else " ")
+        lines.append("".join(row))
+    return "\n".join(lines)
 
 
 def _nickname_from_article(url: str) -> str | None:
