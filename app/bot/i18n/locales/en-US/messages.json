@@ -169,5 +169,8 @@
   "subscribe.backfill_header": "Delivery mode: {mode}\n\nAlso fetch the account's recent articles? (newest first)",
   "subscribe.backfill_none": "No backfill (new articles only)",
   "subscribe.backfill_n": "Fetch last {n} articles",
-  "subscribe.backfilled": "✅ Delivered the last {n} articles (newest first)."
+  "subscribe.backfilled": "✅ Delivered the last {n} articles (newest first).",
+  "subscribe.btn_backfill": "📥 Backfill",
+  "subscribe.backfill_done": "✅ Delivered {n} article(s) this time.",
+  "subscribe.backfill_empty": "The article feed isn't ready yet (new subscriptions take a while to populate on WeChat Read). Tap \"Backfill\" again later."
 }

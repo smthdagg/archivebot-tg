@@ -252,6 +252,10 @@ async def _list_subscriptions(message: types.Message, db, lang: str) -> None:
                 callback_data=f"wsubchg:{sub.id}:{'notify' if is_auto else 'auto'}",
             ),
             types.InlineKeyboardButton(
+                text=t(lang, "subscribe.btn_backfill"),
+                callback_data=f"wbk:{sub.id}",
+            ),
+            types.InlineKeyboardButton(
                 text=t(lang, "subscribe.btn_unsub"),
                 callback_data=f"wsubrm:{sub.id}",
             ),
@@ -265,6 +269,78 @@ async def _list_subscriptions(message: types.Message, db, lang: str) -> None:
 # ---------------------------------------------------------------------------
 # 订阅落库（pick/mode/fmt 共用）
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# 已有订阅的手动补拉（wbk:{subId} → 选数量 → 执行）
+# ---------------------------------------------------------------------------
+
+@router.callback_query(F.data.startswith("wbk:"))
+async def on_manual_backfill_pick(callback: types.CallbackQuery) -> None:
+    """订阅列表「补拉」按钮：选数量（沿用补拉键盘，前缀 wbkr）。"""
+    try:
+        sub_id = int(callback.data.split(":", 1)[1])
+    except ValueError:
+        await callback.answer()
+        return
+    db = SessionLocal()
+    try:
+        user = get_user_by_telegram_id(db, callback.from_user.id)
+        lang = user_language(user, callback.from_user.language_code)
+        if user is None:
+            await callback.answer("denied", show_alert=True)
+            return
+        sub = db.get(WxSubscription, sub_id)
+        if sub is None or sub.user_id != user.id:
+            await callback.answer(t(lang, "user.denied"), show_alert=True)
+            return
+        mode_label = t(lang, "subscribe.mode_auto" if sub.delivery_mode == DeliveryMode.AUTO.value
+                       else "subscribe.mode_notify")
+        await callback.message.edit_text(
+            t(lang, "subscribe.backfill_header", mode=mode_label),
+            reply_markup=_backfill_kb("wbkr", sub.id, lang),
+        )
+        await callback.answer()
+    finally:
+        db.close()
+
+
+@router.callback_query(F.data.startswith("wbkr:"))
+async def on_manual_backfill_run(callback: types.CallbackQuery) -> None:
+    """执行手动补拉：wbkr:{subId}:{count}。"""
+    _, key, count_s = callback.data.split(":", 2)
+    try:
+        sub_id = int(key)
+        backfill = max(0, min(10, int(count_s)))
+    except ValueError:
+        await callback.answer()
+        return
+    db = SessionLocal()
+    try:
+        user = get_user_by_telegram_id(db, callback.from_user.id)
+        lang = user_language(user, callback.from_user.language_code)
+        if user is None:
+            await callback.answer("denied", show_alert=True)
+            return
+        sub = db.get(WxSubscription, sub_id)
+        if sub is None or sub.user_id != user.id:
+            await callback.answer(t(lang, "user.denied"), show_alert=True)
+            return
+        if backfill > 0:
+            from app.tasks.weread_check import auto_wechat_profile, backfill_recent_articles
+
+            delivered = await backfill_recent_articles(
+                db, sub, backfill, auto_wechat_profile(), ignore_baseline=True
+            )
+            if delivered:
+                await callback.message.edit_text(
+                    t(lang, "subscribe.backfill_done", n=delivered)
+                )
+            else:
+                await callback.message.edit_text(t(lang, "subscribe.backfill_empty"))
+        await callback.answer()
+    finally:
+        db.close()
+
 
 # ---------------------------------------------------------------------------
 # 补拉选择 → 落库（wbn=notify / wbf=auto，key 内嵌 accountId 和可选 fmt）
@@ -442,6 +518,18 @@ async def on_pick(callback: types.CallbackQuery) -> None:
             await callback.answer("denied", show_alert=True)
             return
         account = _account_row(db, account_id)
+        # best-effort 补号名：文章流里的 mpInfo.mp_name（流未物料时拿不到，留待后补）
+        if account is None or not account.mp_name:
+            try:
+                probe = await weread_client.call_async(
+                    "articles", account_id, "--count", "1", "--offset", "0"
+                )
+                arts = probe.get("articles") or []
+                if arts and arts[0].get("mp_name"):
+                    account = _ensure_account(db, account_id, arts[0]["mp_name"])
+                    db.commit()
+            except WereadError:
+                pass
         buttons = [
             [types.InlineKeyboardButton(
                 text=t(lang, "subscribe.mode_notify_btn"),

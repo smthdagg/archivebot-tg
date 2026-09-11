@@ -126,6 +126,9 @@ def stub_search(monkeypatch):
             return {"ok": True}
         if op == "status":
             return {"ok": True, "account": "default"}
+        if op == "articles":
+            # on_pick 的 best-effort 号名探测：默认空流（不触发名称回填）
+            return state.setdefault("articles", {"articles": []})
         raise AssertionError(f"unexpected op {op}")
 
     monkeypatch.setattr(subscribe_mod.weread_client, "call_async", fake_call)

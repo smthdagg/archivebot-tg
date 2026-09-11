@@ -169,5 +169,8 @@
   "subscribe.backfill_header": "交付方式：{mode}\n\n是否同时补拉该号最近的几篇文章？（按最新→旧）",
   "subscribe.backfill_none": "不拉历史（只收新文）",
   "subscribe.backfill_n": "补拉最近 {n} 篇",
-  "subscribe.backfilled": "✅ 已补发最近 {n} 篇文章（最新→旧）。"
+  "subscribe.backfilled": "✅ 已补发最近 {n} 篇文章（最新→旧）。",
+  "subscribe.btn_backfill": "📥 补拉",
+  "subscribe.backfill_done": "✅ 本次补发 {n} 篇文章。",
+  "subscribe.backfill_empty": "该号的文章流暂未就绪（新订阅需要等微信读书生成，约几十分钟），稍后再点「补拉」。"
 }
