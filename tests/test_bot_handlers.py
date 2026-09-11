@@ -742,18 +742,7 @@ async def test_rearchive_carries_cookie_profile(patch_session, db, monkeypatch):
     msg = _FakeMessage(_FakeUser(771001), chat_id=123456)
     cb = _FakeCallback(_FakeUser(771001), f"hra:{old.id}", message=msg)
     # 找到 hra 回调函数（history 模块内以 callback_query 注册）
-    handler = None
-    for route in history_mod.router.callback_query.handlers:
-        pass
-    # 直接调用模块内函数：hra 回调在 _render_detail 相关逻辑之后的独立函数
-    import inspect
-
-    for name, fn in inspect.getmembers(history_mod, inspect.iscoroutinefunction):
-        if getattr(fn, "__name__", "") == "rearchive":
-            handler = fn
-            break
-    assert handler is not None
-    await handler(cb)
+    await history_mod.rearchive(cb)
 
     new_task = db.query(Task).filter(Task.id != old.id).one()
     assert new_task.cookie_profile == "zhihu"  # 沿用原任务 profile
