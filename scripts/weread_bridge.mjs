@@ -151,20 +151,38 @@ async function opArticles(accountId, opts) {
   try {
     const opened = await openCanonical();
     const page = await opened.canonical.publicAccounts.articles(accountId, opts);
-    const articles = (page.articles || [])
-      .map((a) => {
-        const mp = a.mpInfo || {};
-        return {
-          review_id: a.reviewId ?? null,
-          title: a.title ?? mp.title ?? "",
-          doc_url: mp.doc_url ?? "",
-          article_time: mp.time ?? a.createTime ?? 0,
-          mp_name: mp.mp_name ?? "",
-          pay_type: mp.payType ?? 0,
-          pic_url: mp.pic_url ?? "",
-        };
-      })
-      .filter((a) => !!a.doc_url);
+    const canonical = opened.canonical;
+    const resolvedDocUrls = new Set(); // reviewId → doc_url 缓存（本进程内）
+    const articles = [];
+    for (const a of page.articles || []) {
+      const mp = a.mpInfo || {};
+      const entry = {
+        review_id: a.reviewId ?? null,
+        title: a.title ?? mp.title ?? "",
+        doc_url: mp.doc_url ?? "",
+        article_time: mp.time ?? a.createTime ?? 0,
+        mp_name: mp.mp_name ?? "",
+        pay_type: mp.payType ?? 0,
+        pic_url: mp.pic_url ?? "",
+      };
+      // 增量流条目的 mpInfo 常缺 doc_url（实测只有 title/pic_url/payType）；
+      // review.single 返回完整 mpInfo（含 doc_url），按 reviewId 逐篇补查
+      if (!entry.doc_url && entry.review_id && !resolvedDocUrls.has(entry.review_id)) {
+        try {
+          const r = await canonical.review.single(entry.review_id);
+          const docUrl = r.review?.mpInfo?.doc_url;
+          if (docUrl) {
+            entry.doc_url = docUrl;
+            resolvedDocUrls.add(entry.review_id);
+          }
+        } catch (err) {
+          process.stderr.write(`review.single failed for ${entry.review_id}: ${err?.message ?? err}\n`);
+        }
+      }
+      if (entry.doc_url) {
+        articles.push(entry);
+      }
+    }
     emit({
       account_id: page.accountId ?? accountId,
       synckey: page.synckey ?? null,
