@@ -332,7 +332,6 @@ def test_archive_format_selected_attaches_cookie_profile(
     且对 FSM 里的字符串平台误用 .value，导致知乎问题页报 LOGIN_REQUIRED。
     """
     import app.archive.cookie_profile as cookie_profile_mod
-    from app.database.services import create_user
 
     def fake_resolve(platform, url):
         assert platform == "zhihu"  # 平台以字符串传入（FSM 数据）
