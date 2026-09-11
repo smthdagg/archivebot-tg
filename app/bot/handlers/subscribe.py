@@ -386,15 +386,14 @@ async def _finish_subscribe(
                   details={"mode": mode.value, "updated": True})
             db.commit()
 
-        # 补拉最近 N 篇（offset 翻页，最新→旧；失败不影响订阅生效）
+        # 补拉最近 N 篇（offset 翻页，最新→旧；忽略基线，失败不影响订阅生效）
         backfilled = 0
         if backfill > 0:
             try:
-                from app.archive.cookie_registry import SPECIAL_SITES as _SS  # noqa: F401
                 from app.tasks.weread_check import auto_wechat_profile, backfill_recent_articles
 
                 backfilled = await backfill_recent_articles(
-                    db, existing, backfill, auto_wechat_profile()
+                    db, existing, backfill, auto_wechat_profile(), ignore_baseline=True
                 )
             except Exception:  # noqa: BLE001 - 补拉失败不阻断订阅
                 logger.exception("backfill failed for %s", account_id)

@@ -437,3 +437,39 @@ async def test_backfill_fetch_error_returns_zero(patch_session, db, user, monkey
     db.add(sub)
     db.commit()
     assert await backfill_recent_articles(db, sub, 3, None) == 0
+
+
+async def test_backfill_ignores_recent_baseline(patch_session, db, user, monkeypatch):
+    """回归：订阅落库把基线设为「现在」，补拉历史文章必须忽略基线才能发出去。"""
+    import time as _time
+
+    import app.tasks.weread_check as wc
+
+    async def fake_call(op, *args, **kwargs):
+        return {"articles": [
+            {"doc_url": "https://mp.weixin.qq.com/s/h1", "title": "历史",
+             "article_time": _time.time() - 7200, "pay_type": 0},
+        ]}
+
+    monkeypatch.setattr(subscribe_mod.weread_client, "call_async", fake_call)
+
+    pushed: list[str] = []
+
+    async def fake_deliver(db_, sub_, article):
+        pushed.append(article["doc_url"])
+        return True
+
+    monkeypatch.setattr(wc, "deliver_notification_async", fake_deliver)
+
+    sub = WxSubscription(user_id=user.id, chat_id=1, account_id="MP_WXS_111",
+                         delivery_mode="notify", last_article_time=int(_time.time()))
+    db.add(sub)
+    db.commit()
+    prev_baseline = sub.last_article_time
+
+    delivered = await wc.backfill_recent_articles(db, sub, 3, None, ignore_baseline=True)
+
+    assert delivered == 1
+    assert pushed == ["https://mp.weixin.qq.com/s/h1"]
+    # 基线不回退：推到 max(原基线, 已交付最新篇)
+    assert sub.last_article_time >= prev_baseline

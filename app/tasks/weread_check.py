@@ -243,11 +243,15 @@ def _auto_archive_subscriber(db, sub: WxSubscription, article: dict, cookie_prof
     return True
 
 
-async def backfill_recent_articles(db, sub: WxSubscription, count: int, cookie_profile: str | None) -> int:
+async def backfill_recent_articles(
+    db, sub: WxSubscription, count: int, cookie_profile: str | None, *, ignore_baseline: bool = False
+) -> int:
     """订阅时补拉最近 N 篇（offset 翻页，最新→旧，可回放）。
 
-    与增量流的区别：offset 翻页不消费服务端游标，可反复读；基线过滤仍生效
-    （同文不重复交付），交付成功则把基线推进到该文时间。返回交付篇数。
+    ignore_baseline=True（订阅时的补拉）：忽略当前基线，把最近 N 篇照常交付
+    ——订阅落库时基线被设为「现在」，历史文章天然比基线旧，若不忽略则一篇
+    都发不出去。交付后基线统一推进到「已交付最新篇与原基线的较大者」，
+    保证稳态（从此刻起）语义不回退。offset 翻页不消费增量游标，可反复读。
     """
     if count <= 0:
         return 0
@@ -259,11 +263,12 @@ async def backfill_recent_articles(db, sub: WxSubscription, count: int, cookie_p
         logger.warning("backfill fetch failed for %s: %s", sub.account_id, e)
         return 0
     articles = (page.get("articles") or [])[:count]
+    baseline = 0 if ignore_baseline else (sub.last_article_time or 0)
     # 先过滤（基线内已交付/付费/无时间戳），再按时间升序交付（阅读顺序旧→新），
     # 避免先推最新篇把基线推过更旧的同批文章
     eligible = sorted(
         (a for a in articles
-         if (a.get("article_time") or 0) > (sub.last_article_time or 0)
+         if (a.get("article_time") or 0) > baseline
          and (a.get("article_time") or 0) > 0
          and a.get("pay_type") != 2),
         key=lambda a: a["article_time"],
