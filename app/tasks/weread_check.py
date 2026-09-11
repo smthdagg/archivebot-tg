@@ -158,8 +158,11 @@ def _has_existing_task(db, user_id: int, url: str) -> bool:
     return row is not None
 
 
-def _notify_subscriber(db, sub: WxSubscription, article: dict) -> bool:
-    """notify 模式：登记 pending + 推送按钮消息。成功返回 True（推进基线）。"""
+async def deliver_notification_async(db, sub: WxSubscription, article: dict) -> bool:
+    """notify 交付（异步核心）：登记 pending + 推按钮消息。成功 True（推进基线）。
+
+    bot 进程内直接 ``await``；worker 进程经 ``_notify_subscriber()`` 包装。
+    """
     pending = WxPendingArticle(
         account_id=sub.account_id,
         doc_url=article["doc_url"],
@@ -168,7 +171,6 @@ def _notify_subscriber(db, sub: WxSubscription, article: dict) -> bool:
     )
     db.add(pending)
     db.flush()  # 拿 pending.id
-    from app.bot.delivery import run_async
     from app.bot.delivery import send_message as _send
     from app.bot.i18n import t
     from app.bot.keyboards import wx_archive_button
@@ -182,12 +184,24 @@ def _notify_subscriber(db, sub: WxSubscription, article: dict) -> bool:
         url=article["doc_url"],
     )
     try:
-        run_async(_send(sub.chat_id, text, reply_markup=wx_archive_button(lang, pending.id)))
+        await _send(sub.chat_id, text, reply_markup=wx_archive_button(lang, pending.id))
     except Exception as e:  # noqa: BLE001
         logger.warning("notify push to chat %s failed: %s", sub.chat_id, e)
         db.rollback()
         return False
     return True
+
+
+def _notify_subscriber(db, sub: WxSubscription, article: dict) -> bool:
+    """worker 侧同步入口（持久事件循环上执行异步交付）。"""
+    from app.bot.delivery import run_async
+
+    return run_async(deliver_notification_async(db, sub, article))
+
+
+async def deliver_auto_archive_async(db, sub: WxSubscription, article: dict, cookie_profile: str | None) -> bool:
+    """auto 交付（异步核心）：直接建归档任务并入队。成功 True（推进基线）。"""
+    return _auto_archive_subscriber(db, sub, article, cookie_profile)
 
 
 def _auto_archive_subscriber(db, sub: WxSubscription, article: dict, cookie_profile: str | None) -> bool:
@@ -227,6 +241,47 @@ def _auto_archive_subscriber(db, sub: WxSubscription, article: dict, cookie_prof
         return False
     enqueue_task(task.id)
     return True
+
+
+async def backfill_recent_articles(db, sub: WxSubscription, count: int, cookie_profile: str | None) -> int:
+    """订阅时补拉最近 N 篇（offset 翻页，最新→旧，可回放）。
+
+    与增量流的区别：offset 翻页不消费服务端游标，可反复读；基线过滤仍生效
+    （同文不重复交付），交付成功则把基线推进到该文时间。返回交付篇数。
+    """
+    if count <= 0:
+        return 0
+    try:
+        page = await weread_client.call_async(
+            "articles", sub.account_id, "--count", "20", "--offset", "0"
+        )
+    except WereadError as e:
+        logger.warning("backfill fetch failed for %s: %s", sub.account_id, e)
+        return 0
+    articles = (page.get("articles") or [])[:count]
+    # 先过滤（基线内已交付/付费/无时间戳），再按时间升序交付（阅读顺序旧→新），
+    # 避免先推最新篇把基线推过更旧的同批文章
+    eligible = sorted(
+        (a for a in articles
+         if (a.get("article_time") or 0) > (sub.last_article_time or 0)
+         and (a.get("article_time") or 0) > 0
+         and a.get("pay_type") != 2),
+        key=lambda a: a["article_time"],
+    )
+    delivered = 0
+    for article in eligible:
+        if sub.delivery_mode == DeliveryMode.AUTO.value:
+            ok = await deliver_auto_archive_async(db, sub, article, cookie_profile)
+        else:
+            ok = await deliver_notification_async(db, sub, article)
+        if ok:
+            delivered += 1
+    if delivered and eligible:
+        newest = max(a["article_time"] for a in eligible[:count])
+        sub.last_article_time = max(sub.last_article_time or 0, newest)
+        db.commit()
+    logger.info("backfill for %s/%s: %d delivered", sub.account_id, sub.id, delivered)
+    return delivered
 
 
 def _fan_out_account(db, account: WxMpAccount, page: dict, cookie_profile: str | None, stats: dict) -> None:

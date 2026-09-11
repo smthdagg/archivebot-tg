@@ -177,13 +177,18 @@ async def test_pick_then_notify_creates_subscription(patch_session, db, user, fa
 
     mode = _FakeCallback(fake_user, "wsubmode:MP_WXS_111:notify")
     await subscribe_mod.on_mode(mode)
+    # notify 分支先进补拉选择（wbn 回调）
+    assert mode.message.edits and "wbn:" in str(mode.message.edits[0]["reply_markup"])
+
+    done = _FakeCallback(fake_user, "wbn:MP_WXS_111:0")
+    await subscribe_mod.on_backfill_notify(done)
     assert stub_search["subscribe_calls"] == ["MP_WXS_111"]
     assert db.query(WxMpAccount).filter_by(account_id="MP_WXS_111").count() == 1
     sub = db.query(WxSubscription).filter_by(user_id=user.id).one()
     assert sub.delivery_mode == DeliveryMode.NOTIFY.value
-    assert sub.chat_id == mode.message.chat.id
+    assert sub.chat_id == done.message.chat.id
     assert sub.last_article_time > 0  # 基线＝订阅时刻，不分发历史文章
-    assert any("已订阅" in e["text"] or "Subscribed" in e["text"] for e in mode.message.edits)
+    assert any("已订阅" in e["text"] or "Subscribed" in e["text"] for e in done.message.edits)
 
 
 async def test_pick_then_auto_with_format(patch_session, db, user, fake_user, stub_search):
@@ -194,6 +199,10 @@ async def test_pick_then_auto_with_format(patch_session, db, user, fake_user, st
 
     fmt = _FakeCallback(fake_user, "wsubfmt:MP_WXS_111:md")
     await subscribe_mod.on_fmt(fmt)
+    assert fmt.message.edits and "wbf" in str(fmt.message.edits[0]["reply_markup"])
+
+    done = _FakeCallback(fake_user, "wbf:MP_WXS_111:md:0")
+    await subscribe_mod.on_backfill_auto(done)
     sub = db.query(WxSubscription).one()
     assert sub.delivery_mode == DeliveryMode.AUTO.value
     assert sub.output_types == ["MARKDOWN"]
@@ -202,10 +211,11 @@ async def test_pick_then_auto_with_format(patch_session, db, user, fake_user, st
 async def test_need_login_blocks_subscribe(patch_session, db, user, fake_user, stub_search):
     stub_search["subscribe_error"] = WereadTokenExpired("登录超时", code=-2012)
     await subscribe_mod.on_pick(_FakeCallback(fake_user, "wsubpick:MP_WXS_111"))
-    cb = _FakeCallback(fake_user, "wsubmode:MP_WXS_111:notify")
-    await subscribe_mod.on_mode(cb)
-    assert any(cb.answers[i]["text"] and "/weread_login" in str(cb.answers[i]["text"])
-               for i in range(len(cb.answers)))
+    await subscribe_mod.on_mode(_FakeCallback(fake_user, "wsubmode:MP_WXS_111:notify"))
+    cb = _FakeCallback(fake_user, "wbn:MP_WXS_111:0")
+    await subscribe_mod.on_backfill_notify(cb)
+    assert any(a.get("show_alert") and "/weread_login" in str(a.get("text"))
+               for a in cb.answers)
     assert db.query(WxSubscription).count() == 0
 
 
@@ -214,14 +224,17 @@ async def test_per_user_cap(patch_session, db, user, fake_user, stub_search, mon
     monkeypatch.setattr(settings, "wasub_max_subs_per_user", 1)
     await subscribe_mod.on_pick(_FakeCallback(fake_user, "wsubpick:MP_WXS_111"))
     await subscribe_mod.on_mode(_FakeCallback(fake_user, "wsubmode:MP_WXS_111:notify"))
+    await subscribe_mod.on_backfill_notify(
+        _FakeCallback(fake_user, "wbn:MP_WXS_111:0"))
     assert db.query(WxSubscription).count() == 1
 
     # 第二个号被上限拦截
     stub_search["search"] = {"results": [
         {"account_id": "MP_WXS_222", "title": "另一个号", "author": "", "cover": ""}]}
     await subscribe_mod.on_pick(_FakeCallback(fake_user, "wsubpick:MP_WXS_222"))
-    cb2 = _FakeCallback(fake_user, "wsubmode:MP_WXS_222:notify")
-    await subscribe_mod.on_mode(cb2)
+    await subscribe_mod.on_mode(_FakeCallback(fake_user, "wsubmode:MP_WXS_222:notify"))
+    cb2 = _FakeCallback(fake_user, "wbn:MP_WXS_222:0")
+    await subscribe_mod.on_backfill_notify(cb2)
     assert db.query(WxSubscription).count() == 1
     assert any(cb2.answers[i].get("show_alert") for i in range(len(cb2.answers)))
 
@@ -352,3 +365,75 @@ async def test_generic_error_shows_search_failed(patch_session, db, user, fake_u
     msg = _FakeMessage(fake_user, text="/subscribe 测试号")
     await subscribe_mod.on_subscribe(msg)
     assert any("boom" in a["text"] for a in msg.answers)
+
+
+# ---------------------------------------------------------------------------
+# 补拉（订阅时顺带拉最近 N 篇）
+# ---------------------------------------------------------------------------
+
+async def test_backfill_delivers_newest_and_advances_baseline(
+    patch_session, db, user, fake_user, stub_search, monkeypatch
+):
+    """补拉 3 篇（含 1 付费 + 1 无时间戳）→ 实际交付 2 篇，基线推进到最新。"""
+    stub_search["articles"] = {"articles": [
+        {"doc_url": "https://mp.weixin.qq.com/s/b1", "title": "新", "article_time": 1700000300, "pay_type": 0},
+        {"doc_url": "https://mp.weixin.qq.com/s/b2", "title": "付费", "article_time": 1700000200, "pay_type": 2},
+        {"doc_url": "https://mp.weixin.qq.com/s/b3", "title": "旧", "article_time": 1700000100, "pay_type": 0},
+    ]}
+
+    async def fake_call(op, *args, **kwargs):
+        if op == "articles":
+            assert "--offset" in args  # 补拉走 offset 翻页
+            return stub_search["articles"]
+        if op == "subscribe":
+            return {"ok": True}
+        raise AssertionError(f"unexpected op {op}")
+
+    monkeypatch.setattr(subscribe_mod.weread_client, "call_async", fake_call)
+
+    pushed: list[int] = []
+
+    async def fake_deliver(db_, sub_, article):
+        pushed.append(article["doc_url"])
+        return True
+
+    import app.tasks.weread_check as wc
+    monkeypatch.setattr(wc, "deliver_notification_async", fake_deliver)
+
+    sub = WxSubscription(user_id=user.id, chat_id=123, account_id="MP_WXS_111",
+                         delivery_mode="notify", last_article_time=0)
+    db.add(sub)
+    db.commit()
+
+    from app.tasks.weread_check import backfill_recent_articles
+    delivered = await backfill_recent_articles(db, sub, 3, None)
+
+    assert delivered == 2  # 付费被过滤；时间戳>0 的两篇交付
+    assert sub.last_article_time == 1700000300  # 基线推进到最新
+    # 按时间升序交付（旧→新的阅读顺序）
+    assert pushed == ["https://mp.weixin.qq.com/s/b3", "https://mp.weixin.qq.com/s/b1"]
+
+
+async def test_backfill_zero_is_noop(patch_session, db, user, monkeypatch):
+    sub = WxSubscription(user_id=user.id, chat_id=1, account_id="MP_WXS_111",
+                         delivery_mode="notify", last_article_time=0)
+    db.add(sub)
+    db.commit()
+
+    from app.tasks.weread_check import backfill_recent_articles
+    assert await backfill_recent_articles(db, sub, 0, None) == 0
+
+
+async def test_backfill_fetch_error_returns_zero(patch_session, db, user, monkeypatch):
+    from app.archive.weread_client import WereadError
+    from app.tasks.weread_check import backfill_recent_articles
+
+    async def failing_call(op, *args, **kwargs):
+        raise WereadError("boom", code=-9999)
+
+    monkeypatch.setattr(subscribe_mod.weread_client, "call_async", failing_call)
+    sub = WxSubscription(user_id=user.id, chat_id=1, account_id="MP_WXS_111",
+                         delivery_mode="notify", last_article_time=0)
+    db.add(sub)
+    db.commit()
+    assert await backfill_recent_articles(db, sub, 3, None) == 0

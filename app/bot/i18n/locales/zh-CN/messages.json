@@ -165,5 +165,9 @@
   "admin.weread": "📡 微信读书",
   "admin.weread.login_btn": "📷 扫码登录 / 重新登录",
   "weread.login_in_progress": "⏳ 已有登录流程进行中，请先完成或等待其结束。",
-  "subscribe.verify_needed": "⚠️ 微信读书触发了人工验证（-2041）。\n\n请在手机上打开「微信读书」官方 App，正常浏览一下（或完成它提示的验证），稍后重试本命令。\n重新扫码无法解除该限制。"
+  "subscribe.verify_needed": "⚠️ 微信读书触发了人工验证（-2041）。\n\n请在手机上打开「微信读书」官方 App，正常浏览一下（或完成它提示的验证），稍后重试本命令。\n重新扫码无法解除该限制。",
+  "subscribe.backfill_header": "交付方式：{mode}\n\n是否同时补拉该号最近的几篇文章？（按最新→旧）",
+  "subscribe.backfill_none": "不拉历史（只收新文）",
+  "subscribe.backfill_n": "补拉最近 {n} 篇",
+  "subscribe.backfilled": "✅ 已补发最近 {n} 篇文章（最新→旧）。"
 }

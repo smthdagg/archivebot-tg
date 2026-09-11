@@ -228,6 +228,7 @@ async function main() {
       const arg = process.argv[i];
       if (arg === "--synckey") opts.synckey = Number(process.argv[++i]);
       else if (arg === "--count") opts.count = Number(process.argv[++i]);
+      else if (arg === "--offset") opts.offset = Number(process.argv[++i]);
     }
     await opArticles(accountId, opts);
     return;

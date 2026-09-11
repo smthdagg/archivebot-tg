@@ -266,12 +266,47 @@ async def _list_subscriptions(message: types.Message, db, lang: str) -> None:
 # 订阅落库（pick/mode/fmt 共用）
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# 补拉选择 → 落库（wbn=notify / wbf=auto，key 内嵌 accountId 和可选 fmt）
+# ---------------------------------------------------------------------------
+
+@router.callback_query(F.data.startswith("wbn:"))
+async def on_backfill_notify(callback: types.CallbackQuery) -> None:
+    _, account_id, count_s = callback.data.split(":", 2)
+    try:
+        backfill = max(0, min(10, int(count_s)))
+    except ValueError:
+        await callback.answer()
+        return
+    await _finish_subscribe(callback, account_id, DeliveryMode.NOTIFY, [], backfill=backfill)
+
+
+@router.callback_query(F.data.startswith("wbf:"))
+async def on_backfill_auto(callback: types.CallbackQuery) -> None:
+    # wbf:{accountId}:{fmt}:{count}
+    _, key, fmt, count_s = callback.data.split(":", 3)
+    try:
+        backfill = max(0, min(10, int(count_s)))
+    except ValueError:
+        await callback.answer()
+        return
+    output_types = _output_types(fmt)
+    if not output_types:
+        await callback.answer("denied", show_alert=True)
+        return
+    await _finish_subscribe(
+        callback, key, DeliveryMode.AUTO, [o.value for o in output_types],
+        fmt_key=fmt, backfill=backfill,
+    )
+
+
 async def _finish_subscribe(
     callback: types.CallbackQuery,
     account_id: str,
     mode: DeliveryMode,
     output_types: list[str],
-    fmt_label: str | None = None,
+    fmt_key: str | None = None,
+    backfill: int = 0,
 ) -> None:
     db = SessionLocal()
     try:
@@ -280,6 +315,7 @@ async def _finish_subscribe(
             await callback.answer("denied", show_alert=True)
             return
         lang = user_language(user, callback.from_user.language_code)
+        fmt_label = t(lang, f"format.{fmt_key}") if fmt_key else None
 
         settings = get_settings()
         existing = db.scalar(
@@ -326,7 +362,7 @@ async def _finish_subscribe(
                 "请评估 weread 账号风控压力。",
             )
 
-        # 分发基线＝当前时刻：不分发历史文章（防首拉洪水）
+        # 分发基线＝当前时刻：不分发历史文章（防首拉洪水）；补拉会显式覆盖基线
         if existing is None:
             existing = WxSubscription(
                 user_id=user.id,
@@ -341,16 +377,6 @@ async def _finish_subscribe(
                   target_type="wx_subscription", target_id=account_id,
                   details={"mode": mode.value})
             db.commit()
-            if mode == DeliveryMode.AUTO:
-                await callback.message.edit_text(
-                    t(lang, "subscribe.created_auto",
-                      name=_display_name(account, account_id), fmt=fmt_label or "PDF")
-                )
-            else:
-                await callback.message.edit_text(
-                    t(lang, "subscribe.created_notify",
-                      name=_display_name(account, account_id))
-                )
         else:
             existing.active = True
             existing.delivery_mode = mode.value
@@ -359,14 +385,51 @@ async def _finish_subscribe(
                   target_type="wx_subscription", target_id=existing.id,
                   details={"mode": mode.value, "updated": True})
             db.commit()
-            await callback.message.edit_text(
-                t(lang, "subscribe.mode_changed",
-                  mode=t(lang, "subscribe.mode_auto" if mode == DeliveryMode.AUTO
-                         else "subscribe.mode_notify"))
-            )
+
+        # 补拉最近 N 篇（offset 翻页，最新→旧；失败不影响订阅生效）
+        backfilled = 0
+        if backfill > 0:
+            try:
+                from app.archive.cookie_registry import SPECIAL_SITES as _SS  # noqa: F401
+                from app.tasks.weread_check import auto_wechat_profile, backfill_recent_articles
+
+                backfilled = await backfill_recent_articles(
+                    db, existing, backfill, auto_wechat_profile()
+                )
+            except Exception:  # noqa: BLE001 - 补拉失败不阻断订阅
+                logger.exception("backfill failed for %s", account_id)
+
+        if mode == DeliveryMode.AUTO:
+            text = t(lang, "subscribe.created_auto",
+                     name=_display_name(account, account_id), fmt=fmt_label or "PDF")
+        else:
+            text = t(lang, "subscribe.created_notify",
+                     name=_display_name(account, account_id))
+        if backfilled:
+            text += "\n" + t(lang, "subscribe.backfilled", n=backfilled)
+        await callback.message.edit_text(text)
         await callback.answer()
     finally:
         db.close()
+
+
+_BACKFILL_CHOICES = (3, 10)
+
+
+def _backfill_kb(prefix: str, key: str, lang: str) -> types.InlineKeyboardMarkup:
+    """补拉选择键盘：prefix 为 wbn（notify）/ wbf（auto），key 为 accountId 或 subId。"""
+    rows = [
+        [types.InlineKeyboardButton(
+            text=t(lang, "subscribe.backfill_none"),
+            callback_data=f"{prefix}:{key}:0",
+        )]
+    ]
+    for n in _BACKFILL_CHOICES:
+        rows.append([types.InlineKeyboardButton(
+            text=t(lang, "subscribe.backfill_n", n=n),
+            callback_data=f"{prefix}:{key}:{n}",
+        )])
+    return types.InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 @router.callback_query(F.data.startswith("wsubpick:"))
@@ -410,7 +473,13 @@ async def on_mode(callback: types.CallbackQuery) -> None:
             await callback.answer("denied", show_alert=True)
             return
         if mode == DeliveryMode.NOTIFY.value:
-            await _finish_subscribe(callback, account_id, DeliveryMode.NOTIFY, [])
+            # 先选补拉数量（0=只收新文），再落库
+            await callback.message.edit_text(
+                t(lang, "subscribe.backfill_header",
+                  mode=t(lang, "subscribe.mode_notify")),
+                reply_markup=_backfill_kb("wbn", account_id, lang),
+            )
+            await callback.answer()
             return
         buttons = [
             [types.InlineKeyboardButton(
@@ -443,10 +512,13 @@ async def on_fmt(callback: types.CallbackQuery) -> None:
             await callback.answer(t(lang, "url.no_url_found"), show_alert=True)
             return
         if key.startswith("MP_WXS_"):
-            await _finish_subscribe(
-                callback, key, DeliveryMode.AUTO,
-                [o.value for o in output_types], fmt_label=t(lang, f"format.{fmt}"),
+            # 新订阅：先选补拉数量（wbf 携带 fmt），再落库
+            await callback.message.edit_text(
+                t(lang, "subscribe.backfill_header",
+                  mode=t(lang, "subscribe.mode_auto")),
+                reply_markup=_backfill_kb("wbf", f"{key}:{fmt}", lang),
             )
+            await callback.answer()
             return
         # 已有订阅切到 auto：wsubfmt:{subId}:{fmt}
         try:
