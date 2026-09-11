@@ -135,8 +135,8 @@ def test_synckey_and_notify_flow(db, patch_session, monkeypatch, stub_delivery, 
 
     stats = run_subscription_check(db)
 
-    # 首轮无 synckey → 不带 --synckey 参数
-    assert "--synckey" not in seen_opts[0]
+    # 首轮显式传 synckey=0（上游语义：0=全新拉取）
+    assert seen_opts[0][-2:] == ["--synckey", "0"]
     assert account.last_synckey == 42  # 游标已回存
 
     # notify：一条 pending + 一条推送（付费/无时间文章不分发）
