@@ -1,12 +1,6 @@
-"""rq worker 进程入口（docker-compose 运行：python -m app.tasks.worker）。
-
-除 rq 主循环外，还在 daemon 线程里跑公众号订阅增量检查（微信读书路线，
-Phase 2）。纯 rq 无 scheduler（见 weread_check.py），线程循环即定时器；
-部署假设单 worker 副本。
-"""
+"""rq worker 进程入口（docker-compose 运行：python -m app.tasks.worker）。"""
 
 import logging
-import threading
 
 from app.database.database import init_db
 from app.tasks.queue import get_queue, get_redis
@@ -16,12 +10,6 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
 logger = logging.getLogger("worker")
-
-
-def _weread_subscription_loop() -> None:
-    from app.tasks.weread_check import subscription_loop
-
-    subscription_loop()
 
 
 def main() -> None:
@@ -47,11 +35,6 @@ def main() -> None:
                 logger.warning("cookie expiry notify failed: %s", e)
     except Exception as e:  # noqa: BLE001
         logger.debug("cookie expiry check skipped: %s", e)
-    # 公众号订阅增量检查：daemon 线程（无 rq-scheduler，线程循环即定时器）
-    try:
-        threading.Thread(target=_weread_subscription_loop, name="weread-sub", daemon=True).start()
-    except Exception as e:  # noqa: BLE001
-        logger.warning("weread subscription thread failed to start: %s", e)
     from rq.worker import Worker
 
     worker = Worker([get_queue()], connection=get_redis())

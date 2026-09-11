@@ -10,7 +10,6 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -126,66 +125,3 @@ class SystemSetting(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
-# ---------------------------------------------------------------------------
-# 公众号订阅跟踪（微信读书路线，Phase 2）
-# ---------------------------------------------------------------------------
-
-class WxMpAccount(Base):
-    """公众号账号级状态：服务端微信读书账号侧的订阅与增量游标。
-
-    account_id 是微信读书书架上的 bookId（格式 ``MP_WXS_<数字>``）。
-    last_synckey 是微信读书的增量刷新游标（非页码），每次拉取后原样回存。
-    """
-
-    __tablename__ = "wx_mp_accounts"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    account_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
-    mp_name: Mapped[str] = mapped_column(String(128), default="")
-    last_synckey: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    active: Mapped[bool] = mapped_column(default=True)
-    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-
-
-class WxSubscription(Base):
-    """用户对某公众号的订阅（每用户每号一条）。
-
-    last_article_time 是该订阅者的分发基线（Unix 秒）：订阅时刻取当前时间，
-    因此不分发历史文章，只分发基线之后的新文章（防首拉洪水）。
-    """
-
-    __tablename__ = "wx_subscriptions"
-    __table_args__ = (
-        UniqueConstraint("user_id", "account_id", name="uq_wx_sub_user_account"),
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
-    chat_id: Mapped[int] = mapped_column(BigInteger, index=True)
-    account_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("wx_mp_accounts.account_id"), index=True
-    )
-    delivery_mode: Mapped[str] = mapped_column(String(16), default="notify")
-    # auto 模式的默认输出格式（[OutputType.value]）；notify 模式忽略
-    output_types: Mapped[list] = mapped_column(JSON, default=list)
-    last_article_time: Mapped[int] = mapped_column(BigInteger, default=0)
-    active: Mapped[bool] = mapped_column(default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-
-
-class WxPendingArticle(Base):
-    """notify 模式推送出去的文章登记（一键归档按钮的 callback 间接层）。
-
-    公众号文章 URL 远超 Telegram callback_data 的 64 字节上限，按钮只带
-    本表主键（``wsubgo:{id}``），点击后回查 doc_url 建任务。定期清理过期行。
-    """
-
-    __tablename__ = "wx_pending_articles"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    account_id: Mapped[str] = mapped_column(String(64), index=True)
-    doc_url: Mapped[str] = mapped_column(Text)
-    title: Mapped[str | None] = mapped_column(Text, nullable=True)
-    article_time: Mapped[int] = mapped_column(BigInteger, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)

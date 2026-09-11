@@ -48,15 +48,6 @@ def cancel_button(lang: str, task_id: int) -> InlineKeyboardMarkup:
     )
 
 
-def wx_archive_button(lang: str, pending_id: int) -> InlineKeyboardMarkup:
-    """订阅通知的「一键归档」按钮（callback 只带 WxPendingArticle 主键）。"""
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=t(lang, "subscribe.archive_now"), callback_data=f"wsubgo:{pending_id}")]
-        ]
-    )
-
-
 def admin_menu(lang: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -66,10 +57,7 @@ def admin_menu(lang: str) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text=t(lang, "admin.status"), callback_data="adm:status")],
             [InlineKeyboardButton(text=t(lang, "admin.logs"), callback_data="adm:logs")],
             [InlineKeyboardButton(text=t(lang, "admin.regcode"), callback_data="adm:regcode")],
-            [
-                InlineKeyboardButton(text=t(lang, "admin.cookies"), callback_data="adm:cookies"),
-                InlineKeyboardButton(text=t(lang, "admin.weread"), callback_data="adm:weread"),
-            ],
+            [InlineKeyboardButton(text=t(lang, "admin.cookies"), callback_data="adm:cookies")],
             [InlineKeyboardButton(text=t(lang, "action.back"), callback_data="menu")],
         ]
     )

@@ -20,7 +20,7 @@
 | ADR-9 | SSRF 防护在**入队前**做 URL 校验，worker 内再次防御 | 规格 §50；双保险（bot 快速失败 + worker 兜底）；`ssrf_guard` 劫持 `Session.send` 覆盖重定向每一跳 |
 | ADR-10 | 本地环境以 Docker 为准（`python:3.12-slim`），宿主机仅用于编辑/测试 | ArchiveBOT 依赖 Playwright/Chromium 与系统库，容器化最稳；本地开发用 `uv`/`.venv`（3.12），CI 统一 3.12 |
 | ADR-11 | `X` 等登录墙平台**仅用用户自备登录态**（Cookie Profile） | 规格红线：不绕过访问控制；`twitter/xhs/wechat/reddit/zhihu` 已修通注入（`auth_token/ct0` 双域），未授权时规范落 `LOGIN_REQUIRED`；真实抓取需 `cookie_profile`，鉴别单元不碰外网 |
-| ADR-12 | 公众号**订阅跟踪**走微信读书 API（`weread-omni` npm 包，Node 子进程桥接 `scripts/weread_bridge.mjs`）；**单篇归档保持直连渲染** | 单篇即发即归档保真度最高（直连原始 HTML，不变）；批量跟踪需要结构化订阅列表与增量游标（synckey），微信读书是腾讯自家授权接入公众号内容的通道，风控暴露面小；weread-omni 明确不绕过 JS 验证/验证码/指纹（-2041 转人工），与红线 10 一致；凭据由 weread-omni 自管（`WEREAD_CONFIG_DIR=data/weread` 持久卷），worker daemon 线程定时增量检查；分发默认「通知+一键归档」，可按订阅切 auto（交付方式为订阅级设置，非全局全自动） |
+| ADR-12 | **【已撤销 2026-09-11】**公众号订阅跟踪走微信读书 API（weread-omni 桥接）——完整实现并上线后回滚至单条 URL 模式 | 原理由：结构化订阅+增量游标、风控暴露面小。撤销理由：实测上游非官方接口工程成本过高——登录态脆弱（-2012）、搜索接口频繁 -2041 风控、文章接口跨会话视图不一致（同会话有数据/新会话常为空）、增量流条目缺 doc_url 需逐篇补查，且「发现层」的产出（一条 URL）最终仍走既有单条归档管道，新增维护面与资源占用（Node 镜像、daemon 线程）不成比例。代码见 git 历史（e0e9b06 → 5723681），删表迁移 8166a264ac27；若未来重启此方向，先解决：稳定的会话管理（常驻桥接进程而非每次子进程）与文章目录级历史接口 | 单篇即发即归档保真度最高（直连原始 HTML，不变）；批量跟踪需要结构化订阅列表与增量游标（synckey），微信读书是腾讯自家授权接入公众号内容的通道，风控暴露面小；weread-omni 明确不绕过 JS 验证/验证码/指纹（-2041 转人工），与红线 10 一致；凭据由 weread-omni 自管（`WEREAD_CONFIG_DIR=data/weread` 持久卷），worker daemon 线程定时增量检查；分发默认「通知+一键归档」，可按订阅切 auto（交付方式为订阅级设置，非全局全自动） |
 
 ---
 

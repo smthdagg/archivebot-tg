@@ -71,6 +71,8 @@ if [ "$SKIP_BUILD" = "1" ]; then
   echo "    (跳过 build)"
 else
   ssh "${SSH_OPTS[@]}" "$VPS_USER@$VPS_HOST" "cd '$VPS_DIR' && docker compose build 2>&1 | tail -3"
+  # 构建后清理构建缓存（防止 15G 小盘爆满）
+  ssh "${SSH_OPTS[@]}" "$VPS_USER@$VPS_HOST" "docker builder prune -af 2>&1 | tail -1"
 fi
 
 if [ "$NO_RESTART" = "1" ]; then

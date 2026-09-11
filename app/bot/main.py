@@ -10,7 +10,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand, BotCommandScopeChat, BotCommandScopeDefault
 
-from app.bot.handlers import admin, archive, cookies, history, menu, start, subscribe
+from app.bot.handlers import admin, archive, cookies, history, menu, start
 from app.config import get_settings
 from app.database.database import init_db
 
@@ -23,13 +23,10 @@ logger = logging.getLogger("bot")
 # 双语文案太长会截断（命令描述上限 256，但按钮列表要短）——中英并排短句
 _USER_COMMANDS = [
     BotCommand(command="start", description="主菜单 / Main menu"),
-    BotCommand(command="subscribe", description="公众号订阅 / Subscriptions"),
 ]
 _ADMIN_COMMANDS = _USER_COMMANDS + [
     BotCommand(command="cookies", description="Cookie 状态 / Cookie status"),
     BotCommand(command="set_cookie", description="更新 Cookie / Update cookies"),
-    BotCommand(command="weread_login", description="微信读书扫码登录 / WeChat Read login"),
-    BotCommand(command="weread_status", description="微信读书与订阅状态 / Subscription status"),
 ]
 
 
@@ -59,9 +56,6 @@ async def main() -> None:
     dp = Dispatcher(storage=MemoryStorage())
     dp.include_routers(
         start.router,
-        # subscribe 必须在 archive 之前：archive 有任意含 http 文本的兜底
-        # handler，/subscribe <文章URL> 会被它抢走
-        subscribe.router,
         archive.router,
         history.router,
         menu.router,

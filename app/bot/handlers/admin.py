@@ -358,27 +358,3 @@ async def cookies_page(callback: types.CallbackQuery) -> None:
     finally:
         db.close()
     await callback.answer()
-
-
-@router.callback_query(F.data == "adm:weread")
-async def weread_page(callback: types.CallbackQuery) -> None:
-    from app.bot.handlers.subscribe import weread_status_text
-
-    db = SessionLocal()
-    try:
-        admin = get_user_by_telegram_id(db, callback.from_user.id)
-        if admin is None or not is_admin_role(admin.role):
-            await callback.answer("denied", show_alert=True)
-            return
-        lang = user_language(admin, callback.from_user.language_code)
-        text = await weread_status_text(db, lang)
-        kb = [
-            [InlineKeyboardButton(text=t(lang, "admin.weread.login_btn"), callback_data="wlogin")],
-            [InlineKeyboardButton(text=t(lang, "action.back"), callback_data="menu:admin")],
-        ]
-        await callback.message.edit_text(
-            text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb)
-        )
-    finally:
-        db.close()
-    await callback.answer()

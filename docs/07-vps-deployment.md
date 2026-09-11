@@ -229,29 +229,6 @@ ssh -p <VPS-SSH-PORT> root@<VPS-IPv4> \
 - [ ] `curl http://127.0.0.1:8080/healthz` 返回 `{"ok":true}`
 - [ ] Telegram bot 可正常对话（功能冒烟）
 
----
-
-## 7.1 公众号订阅跟踪（2026-09-11 起，微信读书路线）
-
-部署本功能后的运维要点（代码见 `app/bot/handlers/subscribe.py` / `app/tasks/weread_check.py`，决策 ADR-12）：
-
-1. **镜像变更**：Dockerfile 新增 Node 22（NodeSource）+ 全局 `weread-omni@0.1.1`。
-   部署必须 `docker compose build`（deploy 脚本默认会 build）。镜像体积 +≈120MB。
-2. **凭据目录**：`WEREAD_CONFIG_DIR=data/weread`（compose 已挂载 `./data:/app/data`，
-   凭据随宿主目录持久化，**重建容器不丢登录态**）。`.env` 可覆盖。
-3. **首次登录**：管理员在 Telegram 执行 `/weread_login`，bot 推 ASCII 二维码
-   （5 分钟内用微信扫码）。凭据由 weread-omni 存于上述目录，**不落库、不进日志**。
-   亦可手工 `docker compose exec bot node scripts/weread_bridge.mjs status` 验证登录态。
-4. **登录过期**：worker 定时检查遇到 `-2012`（登录超时）会向 ADMIN_IDS 推提醒
-   （24h 冷却），重新 `/weread_login` 即可；`-2041`（需人工验证）同样告警转人工，
-   **不要**误判为 token 过期。
-5. **增量检查**：worker 启动即跑一次，之后每 `WASUB_CHECK_INTERVAL_MINUTES`
-   （默认 240 分钟）一轮。**单 worker 副本假设**——不要 `docker compose up --scale worker`。
-6. **数据表**：`wx_mp_accounts` / `wx_subscriptions` / `wx_pending_articles`
-   （迁移 `a5d985df1063`）。部署后先 `alembic upgrade head`（见 §8）。
-
----
-
 ## 7. 相关文档
 
 - 通用部署指南：[docs/04-deployment.md](04-deployment.md)

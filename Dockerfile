@@ -19,15 +19,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ffmpeg \
         && rm -rf /var/lib/apt/lists/*
 
-# Node 22 + weread-omni：公众号订阅经微信读书 API（scripts/weread_bridge.mjs 桥接，
-# 上游硬要求 Node >= 22.13）。全局装 npm 包，桥接脚本随代码 COPY。
-RUN apt-get update && apt-get install -y --no-install-recommends gnupg \
-        && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
-        && apt-get install -y --no-install-recommends nodejs \
-        && npm install -g --no-audit --no-fund weread-omni@0.1.1 \
-        && npm cache clean --force \
-        && rm -rf /var/lib/apt/lists/*
-
 # Install Python deps first for layer caching
 COPY pyproject.toml ./
 RUN pip install --upgrade pip && \
@@ -37,7 +28,7 @@ RUN pip install --upgrade pip && \
                 redis rq requests curl_cffi playwright tqdm \
                 beautifulsoup4 lxml markdownify \
                 markdown trafilatura readability-lxml python-dotenv \
-                httpx qrcode \
+                httpx \
                 "camoufox[geoip]>=0.5" \
                 "yt-dlp>=2024.10.22" && \
     playwright install --with-deps chromium && \
