@@ -236,3 +236,49 @@ def _method_based_injection(service_cls: type, cookies: list[dict[str, Any]]) ->
                 delattr(service_cls, "_get_cookies")
             except AttributeError:
                 pass
+
+def resolve_profile_for_task(platform: str, url: str) -> str | None:
+    """按平台/URL 自动关联任务可用的 cookie profile（建任务时调用）。
+
+    - WEB 平台：按 SPECIAL_SITES 的 domains 匹配 URL（如财新）
+    - 登录类平台（twitter/zhihu/xhs/reddit/wechat）：取第一个配置了该平台
+      cookie 的 profile
+    文件优先于 settings（profile 文件会被运行时回写，settings 有 lru_cache
+    旧值）；容器内相对路径按 /app 兜底。失败返回 None。
+    """
+    import json
+    from pathlib import Path
+
+    from app.archive.cookie_registry import SPECIAL_SITES
+    from app.config import get_settings
+    from app.database.enums import Platform
+
+    profiles: dict = {}
+    path_str = get_settings().cookie_profiles_file
+    if path_str:
+        path = Path(path_str)
+        if not path.is_absolute():
+            path = Path("/app") / path
+        if path.exists():
+            try:
+                loaded = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    profiles = loaded
+            except Exception:
+                profiles = {}
+    if not profiles:
+        profiles = get_settings().cookie_profiles or {}
+
+    if platform == Platform.WEB.value:
+        for key, cfg in SPECIAL_SITES.items():
+            if cfg.get("platform") != Platform.WEB.value:
+                continue
+            for domain in cfg.get("domains", []):
+                if domain.lstrip(".") in (url or "") and key in profiles:
+                    return key
+        return None
+    if platform in ("twitter", "zhihu", "xhs", "reddit", "wechat"):
+        for key, platforms_map in profiles.items():
+            if isinstance(platforms_map, dict) and platforms_map.get(platform):
+                return key
+    return None

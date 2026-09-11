@@ -719,3 +719,41 @@ def test_start_blocked_user_rejected(db_factory, patch_session):
     assert s2.query(UserApplication).count() == 0  # 不产生申请
     s2.rollback()
     s2.close()
+
+
+# ---------------------------------------------------------------------------
+# 回归：重抓（hra:）必须沿用/回补 cookie_profile（知乎问题页 LOGIN_REQUIRED）
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio()
+async def test_rearchive_carries_cookie_profile(patch_session, db, monkeypatch):
+    from app.bot.handlers import history as history_mod
+    from app.database.models import Task
+    from app.database.services import create_user
+    from app.tasks.manager import create_task
+
+    monkeypatch.setattr(history_mod, "enqueue_task", lambda task_id, **kw: None)
+    user = create_user(db, telegram_id=771001, status=UserStatus.ACTIVE)
+    db.commit()
+    old = create_task(db, user_id=user.id, chat_id=1, url="https://www.zhihu.com/question/1",
+                      platform="zhihu", output_types=["PDF"], cookie_profile="zhihu")
+    db.commit()
+
+    msg = _FakeMessage(_FakeUser(771001), chat_id=123456)
+    cb = _FakeCallback(_FakeUser(771001), f"hra:{old.id}", message=msg)
+    # 找到 hra 回调函数（history 模块内以 callback_query 注册）
+    handler = None
+    for route in history_mod.router.callback_query.handlers:
+        pass
+    # 直接调用模块内函数：hra 回调在 _render_detail 相关逻辑之后的独立函数
+    import inspect
+
+    for name, fn in inspect.getmembers(history_mod, inspect.iscoroutinefunction):
+        if getattr(fn, "__name__", "") == "rearchive":
+            handler = fn
+            break
+    assert handler is not None
+    await handler(cb)
+
+    new_task = db.query(Task).filter(Task.id != old.id).one()
+    assert new_task.cookie_profile == "zhihu"  # 沿用原任务 profile

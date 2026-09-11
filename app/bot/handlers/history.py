@@ -155,6 +155,19 @@ async def rearchive(callback: types.CallbackQuery) -> None:
             await callback.answer(t(lang, "user.denied"), show_alert=True)
             return
 
+        # 重抓沿用原任务的 cookie profile；旧任务缺失（如更早创建、或
+        # 此前重抓丢 profile 的历史 bug）时回退自动关联，避免登录类平台
+        # 撞 LOGIN_REQUIRED
+        cookie_profile = task.cookie_profile
+        if not cookie_profile:
+            try:
+                from app.archive.cookie_profile import resolve_profile_for_task
+
+                cookie_profile = resolve_profile_for_task(
+                    task.platform or "web", task.url
+                )
+            except Exception:
+                cookie_profile = None
         new_task = task_manager.create_task(
             db,
             user_id=user.id,
@@ -162,6 +175,7 @@ async def rearchive(callback: types.CallbackQuery) -> None:
             url=task.url,
             platform=task.platform or "web",
             output_types=task.output_types or ["PDF"],
+            cookie_profile=cookie_profile,
         )
         db.commit()
         status_msg = await callback.message.answer(

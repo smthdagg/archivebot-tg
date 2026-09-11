@@ -17,7 +17,7 @@ from app.bot.i18n import t
 from app.bot.keyboards import cancel_button, format_selector
 from app.config import get_settings
 from app.database.database import SessionLocal
-from app.database.enums import OutputType, Platform, TaskStatus, UserStatus
+from app.database.enums import OutputType, TaskStatus, UserStatus
 from app.database.services import get_user_by_telegram_id
 from app.tasks import manager as task_manager
 from app.tasks.manager import TaskLimitError
@@ -97,50 +97,14 @@ async def on_format_selected(callback: types.CallbackQuery, state: FSMContext) -
             await callback.message.answer(t(lang, "url.no_url_found"))
             return
 
+        # 特殊网站（财新等 WEB）按 url 自动关联可用 cookie profile；
+        # 登录类平台（twitter/zhihu/xhs/reddit/wechat）按 profile 配置关联
         try:
-            # 特殊网站（财新等 WEB）按 url 自动关联可用 cookie profile
+            from app.archive.cookie_profile import resolve_profile_for_task
+
+            auto_profile = resolve_profile_for_task(platform.value, url)
+        except Exception:
             auto_profile = None
-            try:
-                from app.archive.cookie_registry import SPECIAL_SITES as _SS
-                from app.config import get_settings as _GS
-                # 文件优先：profile 文件会被运行时回写/更新，settings 有 lru_cache 旧值
-                _profs = {}
-                _pf = _GS().cookie_profiles_file
-                if _pf:
-                    import json as _json
-                    from pathlib import Path as _Path
-                    _pp = _Path(_pf)
-                    if not _pp.is_absolute():
-                        _pp = _Path("/app") / _pp
-                    if _pp.exists():
-                        try:
-                            _loaded = _json.loads(_pp.read_text(encoding="utf-8"))
-                            if isinstance(_loaded, dict):
-                                _profs = _loaded
-                        except Exception:
-                            _profs = {}
-                if not _profs:
-                    _profs = _GS().cookie_profiles or {}
-                if platform == Platform.WEB.value:
-                    for _k, _cfg in _SS.items():
-                        if _cfg.get("platform") != Platform.WEB.value:
-                            continue
-                        for _dom in _cfg.get("domains", []):
-                            if _dom.lstrip(".") in (url or ""):
-                                if _k in _profs:
-                                    auto_profile = _k
-                                    break
-                        if auto_profile:
-                            break
-                elif platform.value in ("twitter", "zhihu", "xhs", "reddit", "wechat"):
-                    # 登录类平台：若某 profile 配置了该平台的 cookie，自动关联
-                    # （twitter→"x"、zhihu→"zhihu"、wechat→"wechat"、caixin 走上面 WEB 分支）
-                    for _k, _platforms in _profs.items():
-                        if _platforms.get(platform.value):
-                            auto_profile = _k
-                            break
-            except Exception:
-                pass
             task = task_manager.create_task(
                 db,
                 user_id=user.id,
