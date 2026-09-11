@@ -324,6 +324,37 @@ def test_archive_format_selected_creates_task_and_enqueues(db, db_factory, patch
     assert enqueue == [tasks[0].id]
 
 
+def test_archive_format_selected_attaches_cookie_profile(
+    db, db_factory, patch_session, enqueue, safe_ssrf, monkeypatch
+):
+    """回归（任务 114/116）：on_format_selected 必须把 resolve 的结果接到
+    create_task 的 cookie_profile——此前重构把 create_task 挤进 except 分支、
+    且对 FSM 里的字符串平台误用 .value，导致知乎问题页报 LOGIN_REQUIRED。
+    """
+    import app.archive.cookie_profile as cookie_profile_mod
+    from app.database.services import create_user
+
+    def fake_resolve(platform, url):
+        assert platform == "zhihu"  # 平台以字符串传入（FSM 数据）
+        assert "zhihu.com" in url
+        return "zhihu"
+
+    monkeypatch.setattr(cookie_profile_mod, "resolve_profile_for_task", fake_resolve)
+    user = _mkuser(db, 6667)
+    msg = _FakeMessage(_FakeUser(6667, "fmt_user2"), chat_id=user.telegram_id)
+    cb = _FakeCallback(_FakeUser(6667, "fmt_user2"), data="fmt:pdf", message=msg)
+    fsm = _FakeFSM({
+        "pending_url": "https://www.zhihu.com/question/2079254257211893392",
+        "pending_platform": "zhihu",
+    })
+    _run(archive_mod.on_format_selected(cb, fsm))
+
+    tasks, _ = task_manager.list_user_tasks(db, user.id)
+    assert len(tasks) == 1
+    assert tasks[0].cookie_profile == "zhihu"  # resolve 结果必须接到任务上
+    assert enqueue == [tasks[0].id]
+
+
 def test_archive_format_selected_missing_state(db, db_factory, patch_session, enqueue, safe_ssrf):
     user = _mkuser(db, 7777)
     msg = _FakeMessage(_FakeUser(7777, "no_state"), chat_id=user.telegram_id)

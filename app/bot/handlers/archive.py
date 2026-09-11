@@ -98,13 +98,16 @@ async def on_format_selected(callback: types.CallbackQuery, state: FSMContext) -
             return
 
         # 特殊网站（财新等 WEB）按 url 自动关联可用 cookie profile；
-        # 登录类平台（twitter/zhihu/xhs/reddit/wechat）按 profile 配置关联
+        # 登录类平台（twitter/zhihu/xhs/reddit/wechat）按 profile 配置关联。
+        # platform 是 FSM 里的字符串，直接传值（勿用 .value）
         try:
             from app.archive.cookie_profile import resolve_profile_for_task
 
-            auto_profile = resolve_profile_for_task(platform.value, url)
+            auto_profile = resolve_profile_for_task(platform, url)
         except Exception:
             auto_profile = None
+
+        try:
             task = task_manager.create_task(
                 db,
                 user_id=user.id,
