@@ -72,11 +72,12 @@ async function openCanonical() {
     opened = await manager.open();
   } catch (err) {
     const msg = String(err?.message ?? err);
-    // 「could not be read」= 无账号文件；「Received undefined」= 全新安装
-    // （config.json 不存在 → 默认账号为 undefined 时上游 join 崩溃）。
-    // 两种都按「登录超时」语义抛出，Python 侧归类为 WereadTokenExpired
-    // → 提示管理员执行 /weread_login
-    if (/could not be read|not logged in|Received undefined/.test(msg)) {
+    if (/Received undefined/.test(msg)) {
+      // config.json 不存在（旧版本 login 未登记默认账号）→ 用显式别名重试，
+      // 已有凭据时无需重新扫码
+      return await manager.open(process.env.WEREAD_ACCOUNT || "default");
+    }
+    if (/could not be read|not logged in/.test(msg)) {
       const e = new Error("weread account not logged in (admin: /weread_login)");
       e.errCode = -2012;
       throw e;
@@ -96,6 +97,12 @@ async function opLogin() {
       onQr: (url) => emit({ event: "qr", url }),
       onStatus: (text) => emit({ event: "status", text }),
     });
+    // weread-omni login 不自动登记默认账号；不登记则后续 open() 找不到别名
+    try {
+      manager.setDefaultAccount(result.account ?? WEREAD_ALIAS);
+    } catch {
+      /* 登记失败不阻断登录结果 */
+    }
     emit({
       event: "done",
       account: result.account,
