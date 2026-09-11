@@ -141,6 +141,30 @@ def fetch_zhihu_question(url: str, qid: str, cookies: list[dict[str, Any]], task
                 except Exception:  # noqa: BLE001
                     break
                 page.wait_for_timeout(1100)
+            # 展开折叠的长答案（知乎默认截断 + 「阅读全文」按钮，仅滚动不展开）
+            try:
+                expanded = page.evaluate(
+                    """() => {
+                      const btns = [...document.querySelectorAll(
+                        '.AnswerItem button, .QuestionHeader-detail button')]
+                        .filter(b => /阅读全文|展开阅读全文|显示全部|展开/.test(b.textContent || ''));
+                      let n = 0;
+                      for (const b of btns) {
+                        try { b.click(); n += 1; } catch (e) { /* 单个失败跳过 */ }
+                      }
+                      return n;
+                    }"""
+                )
+                if expanded:
+                    page.wait_for_timeout(1500)
+                    # 展开后高度变化，再触发一轮懒加载
+                    try:
+                        page.evaluate("window.scrollBy(0, document.body.scrollHeight)")
+                    except Exception:  # noqa: BLE001
+                        pass
+                    page.wait_for_timeout(800)
+            except Exception:  # noqa: BLE001 - 展开失败按折叠内容提取
+                pass
             page.wait_for_timeout(800)
             data = page.evaluate(_EXTRACT_JS) or {}
             # 点击第一个回答的评论入口（评论区默认折叠；按钮可能仍在懒加载，
