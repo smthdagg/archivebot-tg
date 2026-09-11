@@ -229,6 +229,21 @@ ssh -p <VPS-SSH-PORT> root@<VPS-IPv4> \
 - [ ] `curl http://127.0.0.1:8080/healthz` 返回 `{"ok":true}`
 - [ ] Telegram bot 可正常对话（功能冒烟）
 
+## 7.0 VPS 磁盘审计与定期清理计划（2026-09-11 审核）
+
+背景：周中多次部署（悬空镜像每轮 ≈2.4GB 堆积）导致磁盘写满报错。审计与修复：
+
+- **占用结论**：主要增长源是部署产生的悬空旧镜像（api/bot/worker 共享层，净 ≈2.4GB/轮）；已清理释放 2.4GB（11G→8.2G，76%→59%）。本机还运行 tg-ytdlp-bot（4 容器），清理勿动其镜像/卷。
+- **定期计划已审核并修复**：
+  - `ops-archivebot-backup`（03:10 每日）：SQLite 在线一致性备份（经 api 容器 backup API）+ storage tar，DB 留 14 份 / storage 留 7 份
+  - `ops-weekly-cleanup`（03:30 周日）：apt/journal(200M)/悬空镜像/build 缓存//tmp(>24h)/旧快照，TG 报告
+  - `ops-archivebot-health`（每 5 分钟）：4 容器 + healthz + bot 轮询异常 → TG 告警（状态翻转才发）；**新增磁盘守护：磁盘 ≥90% 自动清悬空镜像 + build 缓存**
+  - `ops-daily-snapshot`（23:55 每日）：服务/端口/资源/证书快照
+- **修复记录**：原脚本曾被改名（加 .sh/.py 后缀）致 cron 引用断链，backup/health 长期静默失败——已恢复为 cron 所指名称并试跑通过；`deploy-to-vps.sh` 新增部署后悬空镜像清理（[4.5/5] 步）。
+- **遗留提醒**：/root 下 8 月运维备份（proxy-stack 149M + xui-backup 94M）属系统运维备份未动，需释放空间时可自行删除。
+
+---
+
 ## 7. 相关文档
 
 - 通用部署指南：[docs/04-deployment.md](04-deployment.md)

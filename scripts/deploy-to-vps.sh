@@ -81,6 +81,9 @@ else
   ssh "${SSH_OPTS[@]}" "$VPS_USER@$VPS_HOST" "cd '$VPS_DIR' && docker compose up -d 2>&1 | tail -5"
 fi
 
+echo "==> [4.5/5] 清理悬空旧镜像（每次部署产生一轮，及时回收防周中写满 15G 盘）"
+ssh "${SSH_OPTS[@]}" "$VPS_USER@$VPS_HOST" "docker image prune -f 2>&1 | tail -1"
+
 echo "==> [5/5] 验证"
 ssh "${SSH_OPTS[@]}" "$VPS_USER@$VPS_HOST" \
   "cd '$VPS_DIR' && docker compose ps --format '  {{.Name}}: {{.Status}}' | sed 's/^/  /' && \
