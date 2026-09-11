@@ -307,6 +307,11 @@ def run_subscription_check(db=None) -> dict:
             opts = ["--count", str(_PAGE_COUNT)]
             if account.last_synckey:
                 opts += ["--synckey", str(account.last_synckey)]
+            else:
+                # 首拉显式传 synckey=0（上游文档语义：0=全新拉取）。
+                # 注意该接口是读后即消费的增量流：服务端游标前移后，传旧
+                # synckey 也不回放历史——漏掉的文章靠订阅基线兜底（不推进）。
+                opts += ["--synckey", "0"]
             try:
                 page = weread_client.call_sync("articles", account.account_id, *opts)
             except (WereadTokenExpired, WereadVerifyNeeded) as e:
