@@ -15,6 +15,7 @@ worker 侧定时任务：遍历 active 公众号账号 → weread 桥接增量�
 单 worker 假设：本模块不做跨进程互斥，worker 副本 >1 时需先加分布式锁。
 """
 
+import asyncio
 import logging
 import time
 from datetime import datetime, timedelta, timezone
@@ -255,13 +256,20 @@ async def backfill_recent_articles(
     """
     if count <= 0:
         return 0
-    try:
-        page = await weread_client.call_async(
-            "articles", sub.account_id, "--count", "20", "--offset", "0"
-        )
-    except WereadError as e:
-        logger.warning("backfill fetch failed for %s: %s", sub.account_id, e)
-        return 0
+    # 上游文章接口跨会话视图不稳定（同会话内一致，新会话可能撞空视图），
+    # 空结果换新子进程重试（每次子进程都是新会话）
+    page = {"articles": []}
+    for _attempt in range(3):
+        try:
+            page = await weread_client.call_async(
+                "articles", sub.account_id, "--count", "20", "--offset", "0"
+            )
+        except WereadError as e:
+            logger.warning("backfill fetch failed for %s: %s", sub.account_id, e)
+            return 0
+        if page.get("articles"):
+            break
+        await asyncio.sleep(2)
     articles = (page.get("articles") or [])[:count]
     baseline = 0 if ignore_baseline else (sub.last_article_time or 0)
     # 先过滤（基线内已交付/付费/无时间戳），再按时间升序交付（阅读顺序旧→新），
@@ -372,13 +380,25 @@ def run_subscription_check(db=None) -> dict:
                 # 注意该接口是读后即消费的增量流：服务端游标前移后，传旧
                 # synckey 也不回放历史——漏掉的文章靠订阅基线兜底（不推进）。
                 opts += ["--synckey", "0"]
-            try:
-                page = weread_client.call_sync("articles", account.account_id, *opts)
-            except (WereadTokenExpired, WereadVerifyNeeded) as e:
-                token_failed = e
+            page = None
+            for _attempt in range(3):
+                try:
+                    page = weread_client.call_sync("articles", account.account_id, *opts)
+                except (WereadTokenExpired, WereadVerifyNeeded) as e:
+                    token_failed = e
+                    break
+                except WereadError as e:
+                    logger.warning("articles fetch failed for %s: %s", account.account_id, e)
+                    page = None
+                    break
+                if page.get("articles") or account.last_synckey:
+                    # 命中数据，或稳态增量为空（正常「无新文」）——不再换会话重试
+                    break
+                # 首拉空结果：上游跨会话视图不稳定，换新子进程（新会话）重试
+                time.sleep(2)
+            if token_failed:
                 break
-            except WereadError as e:
-                logger.warning("articles fetch failed for %s: %s", account.account_id, e)
+            if page is None:
                 stats["errors"] += 1
                 continue
 
