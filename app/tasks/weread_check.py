@@ -329,12 +329,21 @@ def run_subscription_check(db=None) -> dict:
 
         if token_failed is not None:
             logger.warning("weread token/verify failure: %s", token_failed)
-            notify_admins(
-                "token" if isinstance(token_failed, WereadTokenExpired) else "verify",
-                "⚠️ 微信读书账号异常，公众号订阅暂停。\n"
-                f"{token_failed}\n"
-                "管理员请执行 /weread_login 重新扫码。",
-            )
+            if isinstance(token_failed, WereadTokenExpired):
+                notify_admins(
+                    "token",
+                    "⚠️ 微信读书登录已失效，公众号订阅暂停。\n"
+                    f"{token_failed}\n"
+                    "管理员请执行 /weread_login 重新扫码。",
+                )
+            else:
+                notify_admins(
+                    "verify",
+                    "⚠️ 微信读书触发人工验证（-2041），公众号订阅暂停。\n"
+                    f"{token_failed}\n"
+                    "请在手机上打开微信读书官方 App 正常使用以完成验证"
+                    "（重新扫码无法解除），稍后自动恢复。",
+                )
         if any(stats[k] for k in ("accounts", "notify", "auto", "errors")):
             logger.info("weread subscription check done: %s", stats)
         return stats

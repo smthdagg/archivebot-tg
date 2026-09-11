@@ -164,5 +164,6 @@
   "admin.cookies_empty": "📋 No special-site cookies configured",
   "admin.weread": "📡 WeChat Read",
   "admin.weread.login_btn": "📷 Scan to log in / re-login",
-  "weread.login_in_progress": "⏳ A login flow is already in progress; finish or wait for it first."
+  "weread.login_in_progress": "⏳ A login flow is already in progress; finish or wait for it first.",
+  "subscribe.verify_needed": "⚠️ WeChat Read requires a human verification (-2041).\n\nOpen the official WeChat Read app on your phone and browse normally (or complete any verification it prompts), then retry.\nRe-scanning the QR code will NOT clear this."
 }

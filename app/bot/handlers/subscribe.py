@@ -196,8 +196,13 @@ async def on_subscribe(message: types.Message) -> None:
         await message.answer(t(lang, "subscribe.searching"))
         try:
             res = await weread_client.call_async("search", name)
-        except (WereadTokenExpired, WereadVerifyNeeded) as e:
-            logger.info("weread not logged in on search: %s", e)
+        except WereadVerifyNeeded as e:
+            # -2041：风控人工验证，与登录态无关，重扫码无效
+            logger.info("weread verify needed on search: %s", e)
+            await message.answer(t(lang, "subscribe.verify_needed"))
+            return
+        except WereadTokenExpired:
+            logger.info("weread not logged in on search")
             await message.answer(t(lang, "subscribe.need_login"))
             return
         except WereadError as e:
@@ -296,8 +301,13 @@ async def _finish_subscribe(
         if account is None or not account.active:
             try:
                 await weread_client.call_async("subscribe", account_id)
-            except (WereadTokenExpired, WereadVerifyNeeded) as e:
-                logger.info("server subscribe blocked: %s", e)
+            except WereadVerifyNeeded:
+                # -2041：风控人工验证，与登录态无关
+                logger.info("server subscribe blocked by verification: %s", account_id)
+                await callback.answer(t(lang, "subscribe.verify_needed"), show_alert=True)
+                return
+            except WereadTokenExpired:
+                logger.info("server subscribe blocked: not logged in")
                 await callback.answer(t(lang, "subscribe.need_login"), show_alert=True)
                 return
             except WereadError as e:
