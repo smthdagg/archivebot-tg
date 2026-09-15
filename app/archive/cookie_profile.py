@@ -229,6 +229,15 @@ def _patch_twitter_cookie_attrs(cookies: list[dict[str, Any]]) -> None:
             _ps.warning(f"[patch] twitter cookie attrs inject failed: {e}")
 
     _ps.TwitterPlaywrightScraper._setup_browser = patched_setup
+
+    # X 对过老 UA（Chrome 120，vendor UA 池）降级渲染不产出推文内容（实测），
+    # 替换 UA 池为现代版本
+    _ps.TwitterPlaywrightScraper.user_agents = [
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) '
+        'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+        'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36',
+    ]
     _ps._twitter_cookie_attrs_patched = True
 
 
