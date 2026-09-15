@@ -205,15 +205,33 @@ def _patch_twitter_cookie_attrs(cookies: list[dict[str, Any]]) -> None:
         return
 
     profile_by_name = {c["name"]: c for c in cookies if c.get("name") in ("auth_token", "ct0")}
-    original_setup = _ps.TwitterPlaywrightScraper._setup_browser
 
     async def patched_setup(self):
-        await original_setup(self)
-        pair = [(name, profile_by_name[name]) for name in ("auth_token", "ct0") if name in profile_by_name]
-        if not pair or not self.context:
-            return
+        """极简浏览器上下文（实测可用形态）替换 vendor 的重 stealth 段。
+
+        vendor 的 add_init_script（fake chrome/media 原型劫持/permissions
+        瞲骗）与 en-US/New_York 环境、老 UA 池会被 X 降级渲染（空推文 /
+        Something went wrong）。实测极简形态（现代 UA + cookie 原属性 +
+        无 init script）稳定返回推文内容。
+        """
+        self.playwright = await _ps.async_playwright().start()
+        self.browser = await self.playwright.chromium.launch(
+            headless=self.headless,
+            args=["--disable-blink-features=AutomationControlled", "--no-sandbox", "--disable-dev-shm-usage"],
+        )
+        self.context = await self.browser.new_context(
+            user_agent=(
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"
+            ),
+            viewport={"width": 1280, "height": 900},
+            locale="zh-CN",
+        )
         inject = []
-        for name, c in pair:
+        for name in ("auth_token", "ct0"):
+            if name not in profile_by_name:
+                continue
+            c = profile_by_name[name]
             inject.append({
                 "name": name,
                 "value": c.get("value", ""),
@@ -223,21 +241,14 @@ def _patch_twitter_cookie_attrs(cookies: list[dict[str, Any]]) -> None:
                 "secure": bool(c.get("secure", True)),
                 "sameSite": c.get("sameSite", "Lax"),
             })
-        try:
-            await self.context.add_cookies(inject)
-        except Exception as e:  # noqa: BLE001
-            _ps.warning(f"[patch] twitter cookie attrs inject failed: {e}")
+        if inject and self.context:
+            try:
+                await self.context.add_cookies(inject)
+                _ps.info("[patch] injected twitter cookies (original attrs)")
+            except Exception as e:  # noqa: BLE001
+                _ps.warning(f"[patch] twitter cookie inject failed: {e}")
 
     _ps.TwitterPlaywrightScraper._setup_browser = patched_setup
-
-    # X 对过老 UA（Chrome 120，vendor UA 池）降级渲染不产出推文内容（实测），
-    # 替换 UA 池为现代版本
-    _ps.TwitterPlaywrightScraper.user_agents = [
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) '
-        'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-        'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36',
-    ]
     _ps._twitter_cookie_attrs_patched = True
 
 
