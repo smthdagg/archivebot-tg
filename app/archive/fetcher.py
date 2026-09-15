@@ -62,6 +62,26 @@ class FetchedArticle:
     page_html: str = ""
 
 
+def _strip_share_params(url: str, platform: Platform) -> str:
+    """剥离分享追踪参数（?s=46 等）。
+
+    X 对带 s=46（分享链接）的 /status/ URL 渲染不出推文内容（实测：登录态
+    正常但三个提取策略全空），剥掉分享参数后渲染正常。只对 twitter 平台
+    生效；urllib 解析失败原样返回。
+    """
+    if platform != Platform.TWITTER or "?" not in url:
+        return url
+    from urllib.parse import parse_qsl, urlencode, urlsplit
+    from urllib.parse import urlsplit as _split
+
+    try:
+        parts = _split(url)
+        query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k != "s"]
+        return urlsplit(url)._replace(query=urlencode(query)).geturl()
+    except Exception:
+        return url
+
+
 def _read_json(path: Path) -> dict:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -180,6 +200,9 @@ def fetch_article(
             f"Platform {platform.value} is not adapted yet",
             code=ErrorCode.UNKNOWN,
         )
+
+    # 剥离分享追踪参数（X 的 ?s=46 渲染不出推文内容，实测见 helper 注释）
+    url = _strip_share_params(url, platform)
 
     # 出网前装 requests 层守卫（幂等；覆盖 services 的 Session 与模块级 requests.get）
     ssrf_guard.ensure_installed()
