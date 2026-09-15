@@ -189,6 +189,49 @@ def _file_based_injection(service_cls: type, cookies: list[dict[str, Any]]) -> A
             pass
 
 
+def _patch_twitter_cookie_attrs(cookies: list[dict[str, Any]]) -> None:
+    """monkey-patch vendor 的 Twitter cookie 注入为「透传原始属性」。
+
+    参考 app/archive/ssrf_guard.py 的包装模式（红线 1：不改 vendor 源码）。
+    vendor 的 _setup_browser 把 auth_token/ct0 硬编码为
+    httpOnly=True/sameSite=None——与真实登录 cookie 属性不符，X 不认账，
+    弹 Cookie 同意墙挡住渲染（任务 119 实测：vendor 路径全失败而
+    Cookie-Editor 原属性注入成功）。这里把注入段替换为：按 profile 里的
+    原始属性（httpOnly/sameSite/secure）注入。
+    """
+    from services import playwright_scraper as _ps
+
+    if getattr(_ps, "_twitter_cookie_attrs_patched", False):
+        return
+
+    profile_by_name = {c["name"]: c for c in cookies if c.get("name") in ("auth_token", "ct0")}
+    original_setup = _ps.TwitterPlaywrightScraper._setup_browser
+
+    async def patched_setup(self):
+        await original_setup(self)
+        pair = [(name, profile_by_name[name]) for name in ("auth_token", "ct0") if name in profile_by_name]
+        if not pair or not self.context:
+            return
+        inject = []
+        for name, c in pair:
+            inject.append({
+                "name": name,
+                "value": c.get("value", ""),
+                "domain": c.get("domain", ".x.com"),
+                "path": c.get("path", "/"),
+                "httpOnly": bool(c.get("httpOnly", name == "auth_token")),
+                "secure": bool(c.get("secure", True)),
+                "sameSite": c.get("sameSite", "Lax"),
+            })
+        try:
+            await self.context.add_cookies(inject)
+        except Exception as e:  # noqa: BLE001
+            _ps.warning(f"[patch] twitter cookie attrs inject failed: {e}")
+
+    _ps.TwitterPlaywrightScraper._setup_browser = patched_setup
+    _ps._twitter_cookie_attrs_patched = True
+
+
 @contextmanager
 def _twitter_auth_injection(service_cls: type, cookies: list[dict[str, Any]]) -> Any:
     """让 Twitter 平台的 Playwright scraper 获得登录态。
@@ -205,6 +248,12 @@ def _twitter_auth_injection(service_cls: type, cookies: list[dict[str, Any]]) ->
     prev = getattr(service_cls, "_twitter_auth_pair", None)
     payload: dict[str, str] | None = wanted if wanted else None
     service_cls._twitter_auth_pair = payload
+    if payload:
+        # vendor 注入的 cookie 属性与真实登录态不符（Cookie 同意墙），改透传原属性
+        try:
+            _patch_twitter_cookie_attrs(cookies)
+        except Exception:  # noqa: BLE001 - 补丁失败按 vendor 原行为
+            pass
     try:
         yield payload
     finally:
