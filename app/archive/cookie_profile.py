@@ -190,14 +190,16 @@ def _file_based_injection(service_cls: type, cookies: list[dict[str, Any]]) -> A
 
 
 def _patch_twitter_cookie_attrs(cookies: list[dict[str, Any]]) -> None:
-    """monkey-patch vendor 的 Twitter cookie 注入为「透传原始属性」。
+    """monkey-patch vendor 的 X 抓取上下文与引用推文提取（红线 1：不改 vendor）。
 
-    参考 app/archive/ssrf_guard.py 的包装模式（红线 1：不改 vendor 源码）。
-    vendor 的 _setup_browser 把 auth_token/ct0 硬编码为
-    httpOnly=True/sameSite=None——与真实登录 cookie 属性不符，X 不认账，
-    弹 Cookie 同意墙挡住渲染（任务 119 实测：vendor 路径全失败而
-    Cookie-Editor 原属性注入成功）。这里把注入段替换为：按 profile 里的
-    原始属性（httpOnly/sameSite/secure）注入。
+    1) _setup_browser 整段替换为极简形态：vendor 的重 stealth 段（fake
+       chrome/media 原型劫持/permissions 瞲骗 + 老 UA 池）被 X 降级渲染
+       （空推文 / Something went wrong）；实测极简形态（现代 UA + cookie
+       原属性 + 无 init script）稳定。
+    2) _extract_tweet_data 包装：vendor 的 Tweet 模型没有引用推文字段，
+       提取后从 DOM 补抓 [data-testid="quoteTweet"]（作者/文本），经
+       模块级暂存 _last_tweet_extras 带出（wechat_patch._last_page_html
+       同款模式），fetcher 组装进产物。
     """
     from services import playwright_scraper as _ps
 
@@ -249,6 +251,37 @@ def _patch_twitter_cookie_attrs(cookies: list[dict[str, Any]]) -> None:
                 _ps.warning(f"[patch] twitter cookie inject failed: {e}")
 
     _ps.TwitterPlaywrightScraper._setup_browser = patched_setup
+
+    # 引用推文补抓：包装 _extract_tweet_data，成功提取后从 DOM 拿 quoteTweet
+    if not getattr(_ps, "_twitter_extract_patched", False):
+        original_extract = _ps.TwitterPlaywrightScraper._extract_tweet_data
+
+        async def patched_extract(self, page, tweet_id: str):
+            data = await original_extract(self, page, tweet_id)
+            extras: dict[str, str] = {}
+            try:
+                quoted = await page.evaluate(
+                    """() => {
+                      const q = document.querySelector('[data-testid="quoteTweet"]');
+                      if (!q) return null;
+                      const author = (q.querySelector('a[href*="/status/"] span')
+                        && q.querySelector('a[href*="/status/"] span').textContent) || '';
+                      const textEl = q.querySelector('[data-testid="tweetText"]');
+                      const text = textEl ? textEl.innerText : q.innerText || '';
+                      return {author: author.trim(), text: text.trim()};
+                    }"""
+                )
+                if quoted:
+                    extras["quoted_author"] = quoted.get("author", "")
+                    extras["quoted_text"] = quoted.get("text", "")
+            except Exception:  # noqa: BLE001 - 引用抓取失败不影响正文
+                pass
+            # 每次提取都重置暂存（防上一篇的引用串到下一篇）
+            _ps._last_tweet_extras = extras
+            return data
+
+        _ps.TwitterPlaywrightScraper._extract_tweet_data = patched_extract
+        _ps._twitter_extract_patched = True
     _ps._twitter_cookie_attrs_patched = True
 
 

@@ -327,7 +327,15 @@ def fetch_article(
             )
             if is_tweet:
                 page_html = getattr(raw, 'text', '') or ''
-                article = _tweet_to_article(raw, task_dir, url)
+                # vendor 补丁的引用推文暂存（无引用/未打补丁时为空 dict）
+                tweet_extras: dict = {}
+                try:
+                    import services.playwright_scraper as _psmod
+
+                    tweet_extras = getattr(_psmod, "_last_tweet_extras", None) or {}
+                except Exception:  # noqa: BLE001
+                    tweet_extras = {}
+                article = _tweet_to_article(raw, task_dir, url, extras=tweet_extras)
                 return article
             result = raw
             if platform == Platform.WECHAT:
@@ -473,11 +481,16 @@ def _classify_code(platform: Platform, exc: Exception) -> str:
     return ErrorCode.UNKNOWN
 
 
-def _tweet_to_article(tweet, task_dir: Path, url: str) -> "FetchedArticle":
+def _tweet_to_article(
+    tweet, task_dir: Path, url: str, extras: dict | None = None
+) -> "FetchedArticle":
     """把 TwitterService 返回的 Tweet 对象落盘为 FetchedArticle 布局。
 
     不改 vendor：Tweet 本身无 save_path，切片在 task_dir 下自建目录，
     产出 content.{md,txt,html} + images/ + metadata.json，再走统一交付链路。
+    extras 为 vendor 补丁带出的引用推文（quoted_author/quoted_text），
+    组装进 md/html；配图以 images/NN 本地引用写入（runner 的
+    copy_images + base64 内联闭环后 PDF/长截图自动带图）。
     """
     import hashlib
     import json as _json
@@ -492,8 +505,9 @@ def _tweet_to_article(tweet, task_dir: Path, url: str) -> "FetchedArticle":
     post_dir = task_dir / folder
     post_dir.mkdir(parents=True, exist_ok=True)
 
-    # 下载媒体（头像与配图）
+    # 下载媒体（头像与配图）；配图记名供 md/html 引用
     images: list[Path] = []
+    photo_names: list[str] = []
     try:
         import requests as _req
 
@@ -517,15 +531,37 @@ def _tweet_to_article(tweet, task_dir: Path, url: str) -> "FetchedArticle":
                 if not p.exists():
                     p.write_bytes(resp.content)
                 images.append(p)
+                if t != "avatar":
+                    photo_names.append(f"images/{fname}")
             except Exception:
                 continue
     except Exception:
         pass
 
+    import html as _html_mod
+
     text = getattr(tweet, "text", "") or ""
     author = getattr(tweet, "author_name", "") or ""
     username = getattr(tweet, "author_username", "") or ""
-    html_content = getattr(tweet, "html_content", None) or f"<p>{text}</p>"
+    quoted_author = (extras or {}).get("quoted_author", "")
+    quoted_text = (extras or {}).get("quoted_text", "")
+    html_content = getattr(tweet, "html_content", None) or f"<p>{_html_mod.escape(text)}</p>"
+
+    # 引用推文（blockquote）与配图（本地 images/ 引用）并入产出
+    quote_md = ""
+    quote_html = ""
+    if quoted_text:
+        quote_md = (
+            f"\n> **引用 @{quoted_author or '-'}**\n"
+            + "\n".join(f"> {line}" for line in quoted_text.splitlines() if line.strip())
+            + "\n"
+        )
+        quote_html = (
+            f'<blockquote><p><strong>引用 @{_html_mod.escape(quoted_author or "-")}</strong></p>'
+            f"<p>{_html_mod.escape(quoted_text).replace(chr(10), '<br/>')}</p></blockquote>"
+        )
+    gallery_md = "".join(f"\n![]({name})\n" for name in photo_names)
+    gallery_html = "".join(f'<p><img src="{name}"/></p>' for name in photo_names)
 
     # 简易富文本产出（供 pdf/screenshot 复用）
     md_lines = []
@@ -536,9 +572,10 @@ def _tweet_to_article(tweet, task_dir: Path, url: str) -> "FetchedArticle":
         md_lines.append(f"**Author**: {author} (@{username})")
         md_lines.append("")
     md_lines.append(text)
-    (post_dir / "content.md").write_text("\n".join(md_lines), encoding="utf-8")
+    md = "\n".join(md_lines) + quote_md + gallery_md
+    (post_dir / "content.md").write_text(md, encoding="utf-8")
     (post_dir / "content.txt").write_text(text, encoding="utf-8")
-    (post_dir / "content.html").write_text(html_content, encoding="utf-8")
+    (post_dir / "content.html").write_text(html_content + quote_html + gallery_html, encoding="utf-8")
 
     meta = {
         "id": tid,
