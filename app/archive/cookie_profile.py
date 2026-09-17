@@ -257,39 +257,54 @@ def _patch_twitter_cookie_attrs(cookies: list[dict[str, Any]]) -> None:
         original_extract = _ps.TwitterPlaywrightScraper._extract_tweet_data
 
         async def patched_extract(self, page, tweet_id: str):
-            # 长推文默认截断（「显示更多/Show more」按钮）：展开后再提取，
-            # 否则归档只有预览半截（实测 919 字全文只拿到 ~700 字）
-            try:
-                for sel in (
-                    'article button:has-text("显示更多")',
-                    'article button:has-text("Show more")',
-                    '[data-testid="tweetText"] ~ * button:has-text("Show more")',
-                ):
-                    btn = await page.query_selector(sel)
-                    if btn:
-                        await btn.click(timeout=3000)
-                        await page.wait_for_timeout(1200)
-                        break
-            except Exception:  # noqa: BLE001 - 展开失败按预览提取
-                pass
             data = await original_extract(self, page, tweet_id)
-            extras: dict[str, str] = {}
+            extras: dict = {}
             try:
-                quoted = await page.evaluate(
+                split = await page.evaluate(
                     """() => {
-                      const q = document.querySelector('[data-testid="quoteTweet"]');
-                      if (!q) return null;
-                      const author = (q.querySelector('a[href*="/status/"] span')
-                        && q.querySelector('a[href*="/status/"] span').textContent) || '';
-                      const textEl = q.querySelector('[data-testid="tweetText"]');
-                      const text = textEl ? textEl.innerText : q.innerText || '';
-                      return {author: author.trim(), text: text.trim()};
+                      const els = [...document.querySelectorAll('[data-testid=tweetText]')];
+                      if (!els.length) return null;
+                      // /status/ 页第一个 tweetText 是主推文；innerText 自带全文
+                      // （视觉截断只是 CSS line-clamp）。其余是对话串/回复。
+                      const main = els[0];
+                      const replies = els.slice(1).slice(0, 10).map(el => {
+                        const article = el.closest('article');
+                        let author = '';
+                        if (article) {
+                          const a = article.querySelector('a[href^="/"] span');
+                          author = a ? a.textContent.trim() : '';
+                        }
+                        return {author, text: el.innerText.trim()};
+                      }).filter(r => r.text);
+                      // 引用推文（转发的内嵌推文）
+                      const q = document.querySelector('[data-testid=quoteTweet]');
+                      let quoted = null;
+                      if (q) {
+                        const qa = q.querySelector('a[href*="/status/"] span');
+                        const qt = q.querySelector('[data-testid=tweetText]');
+                        quoted = {
+                          author: qa ? qa.textContent.trim() : '',
+                          text: qt ? qt.innerText.trim() : (q.innerText || '').trim(),
+                        };
+                      }
+                      return {
+                        mainText: main.innerText.trim(),
+                        mainHtml: main.innerHTML,
+                        replies, quoted,
+                      };
                     }"""
                 )
-                if quoted:
-                    extras["quoted_author"] = quoted.get("author", "")
-                    extras["quoted_text"] = quoted.get("text", "")
-            except Exception:  # noqa: BLE001 - 引用抓取失败不影响正文
+                if split and data:
+                    # 修正 vendor 的拼接 bug：主文本只保留主推文
+                    if split.get("mainText"):
+                        data["text"] = split["mainText"]
+                        data["html_content"] = split.get("mainHtml") or data.get("html_content")
+                    if split.get("quoted"):
+                        extras["quoted_author"] = split["quoted"].get("author", "")
+                        extras["quoted_text"] = split["quoted"].get("text", "")
+                    if split.get("replies"):
+                        extras["thread"] = split["replies"]
+            except Exception:  # noqa: BLE001 - 拆分失败按 vendor 原结果
                 pass
             # 每次提取都重置暂存（防上一篇的引用串到下一篇）
             _ps._last_tweet_extras = extras

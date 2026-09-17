@@ -481,6 +481,10 @@ def _classify_code(platform: Platform, exc: Exception) -> str:
     return ErrorCode.UNKNOWN
 
 
+def _first_line(s: str | None) -> str:
+    return (s or "-").splitlines()[0] if (s or "").strip() else "-"
+
+
 def _tweet_to_article(
     tweet, task_dir: Path, url: str, extras: dict | None = None
 ) -> "FetchedArticle":
@@ -488,9 +492,10 @@ def _tweet_to_article(
 
     不改 vendor：Tweet 本身无 save_path，切片在 task_dir 下自建目录，
     产出 content.{md,txt,html} + images/ + metadata.json，再走统一交付链路。
-    extras 为 vendor 补丁带出的引用推文（quoted_author/quoted_text），
-    组装进 md/html；配图以 images/NN 本地引用写入（runner 的
-    copy_images + base64 内联闭环后 PDF/长截图自动带图）。
+    extras 为 vendor 补丁带出的引用推文（quoted_author/quoted_text）与
+    对话串（thread: [{author, text}]——推文作者常把"引用的文章/文件"放
+    在自回复里），组装进 md/html；配图以 images/NN 本地引用写入（runner
+    的 copy_images + base64 内联闭环后 PDF/长截图自动带图）。
     """
     import hashlib
     import json as _json
@@ -545,6 +550,7 @@ def _tweet_to_article(
     username = getattr(tweet, "author_username", "") or ""
     quoted_author = (extras or {}).get("quoted_author", "")
     quoted_text = (extras or {}).get("quoted_text", "")
+    thread = (extras or {}).get("thread") or []
     html_content = getattr(tweet, "html_content", None) or f"<p>{_html_mod.escape(text)}</p>"
 
     # 引用推文（blockquote）与配图（本地 images/ 引用）并入产出
@@ -560,6 +566,22 @@ def _tweet_to_article(
             f'<blockquote><p><strong>引用 @{_html_mod.escape(quoted_author or "-")}</strong></p>'
             f"<p>{_html_mod.escape(quoted_text).replace(chr(10), '<br/>')}</p></blockquote>"
         )
+    # 对话串（作者自回复常放"引用的文章/文件"链接，如裁决文件 PDF）
+    thread_md = ""
+    thread_html = ""
+    if thread:
+        thread_md = "\n## 对话串\n\n" + "\n\n".join(
+            f"> **@{_first_line(r.get('author'))}**：{r.get('text', '')}"
+            for r in thread
+        ) + "\n"
+        thread_html = (
+            '<hr/><h3>对话串</h3>'
+            + "".join(
+                f'<blockquote><p><strong>@{_html_mod.escape(_first_line(r.get("author")))}</strong></p>'
+                f"<p>{_html_mod.escape(r.get('text', '')).replace(chr(10), '<br/>')}</p></blockquote>"
+                for r in thread
+            )
+        )
     gallery_md = "".join(f"\n![]({name})\n" for name in photo_names)
     gallery_html = "".join(f'<p><img src="{name}"/></p>' for name in photo_names)
 
@@ -572,10 +594,12 @@ def _tweet_to_article(
         md_lines.append(f"**Author**: {author} (@{username})")
         md_lines.append("")
     md_lines.append(text)
-    md = "\n".join(md_lines) + quote_md + gallery_md
+    md = "\n".join(md_lines) + quote_md + gallery_md + thread_md
     (post_dir / "content.md").write_text(md, encoding="utf-8")
     (post_dir / "content.txt").write_text(text, encoding="utf-8")
-    (post_dir / "content.html").write_text(html_content + quote_html + gallery_html, encoding="utf-8")
+    (post_dir / "content.html").write_text(
+        html_content + quote_html + gallery_html + thread_html, encoding="utf-8"
+    )
 
     meta = {
         "id": tid,

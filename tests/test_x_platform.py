@@ -110,7 +110,14 @@ def test_tweet_to_article_includes_quote_and_images(tmp_path: Path) -> None:
 
     _real_requests.get = lambda *a, **kw: _Resp()  # type: ignore[assignment]
     try:
-        extras = {"quoted_author": "quoted_user", "quoted_text": "引用推文的内容\n第二行"}
+        extras = {
+            "quoted_author": "quoted_user",
+            "quoted_text": "引用推文的内容\n第二行",
+            "thread": [
+                {"author": "someone", "text": "自回复：裁决原文 pdf，大家需要可以自取\nhttps://assets.bwbx.io/documents/x"},
+                {"author": "other", "text": "讨论回复"},
+            ],
+        }
         article = _tweet_to_article(_FakeTweet(), tmp_path, "https://x.com/someone/status/123", extras=extras)
     finally:
         if orig_get is not None:
@@ -122,6 +129,9 @@ def test_tweet_to_article_includes_quote_and_images(tmp_path: Path) -> None:
     assert "引用推文的内容" in md and "quoted_user" in md
     assert "引用推文的内容" in html and "quoted_user" in html
     assert "<blockquote>" in html
+    # 对话串进产物（作者自回复里的「引用文章」链接）
+    assert "对话串" in md and "裁决原文 pdf" in md and "assets.bwbx.io" in md
+    assert "对话串" in html and "裁决原文 pdf" in html
     # 配图被引用（本地 images/NN 路径，runner 内联 base64 后 PDF 带图）
     assert "![](images/" in md
     assert '<img src="images/' in html
