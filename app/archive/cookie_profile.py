@@ -257,6 +257,21 @@ def _patch_twitter_cookie_attrs(cookies: list[dict[str, Any]]) -> None:
         original_extract = _ps.TwitterPlaywrightScraper._extract_tweet_data
 
         async def patched_extract(self, page, tweet_id: str):
+            # 长推文默认截断（「显示更多/Show more」按钮）：展开后再提取，
+            # 否则归档只有预览半截（实测 919 字全文只拿到 ~700 字）
+            try:
+                for sel in (
+                    'article button:has-text("显示更多")',
+                    'article button:has-text("Show more")',
+                    '[data-testid="tweetText"] ~ * button:has-text("Show more")',
+                ):
+                    btn = await page.query_selector(sel)
+                    if btn:
+                        await btn.click(timeout=3000)
+                        await page.wait_for_timeout(1200)
+                        break
+            except Exception:  # noqa: BLE001 - 展开失败按预览提取
+                pass
             data = await original_extract(self, page, tweet_id)
             extras: dict[str, str] = {}
             try:
